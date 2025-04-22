@@ -80,7 +80,6 @@ export default function Register() {
                                     id="phone"
                                     type="number"
                                     name="phone"
-                                    value={formData.phone}
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Digite o seu numero de telefone"
