@@ -19,7 +19,8 @@ jobs:
         script: |
           cd ~/PassMais-frontend/pass-mais
           git pull
-          sudo docker compose up --build -d
+          sudo docker rm -f pass-mais || true
+          sudo docker compose up --pull always --build -d
 
     - name: Marcar deploy OK no GitHub
       run: echo "🚀 Deploy finalizado com sucesso!!"
