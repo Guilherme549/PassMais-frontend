@@ -2,53 +2,14 @@ name: CI/CD – Deploy em EC2
 
 on:
   push:
-    branches: [ "main" ]   # Dispara quando der push na main
+    branches: [ "main" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout código
-      uses: actions/checkout@v4
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
-
-    - name: Instalar dependências
-      run: npm ci
-      working-directory: ./pass-mais
-
-    - name: Rodar testes
-      run: npm run test --if-present
-      working-directory: ./pass-mais
-
-    - name: Build do projeto
-      run: npm run build --if-present
-      working-directory: ./pass-mais
-
-    - name: Upload do artefato de build
-      uses: actions/upload-artifact@v4
-      with:
-        name: build
-        path: |
-          pass-mais/
-          pass-mais/Dockerfile
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-    - name: Baixar artefato
-      uses: actions/download-artifact@v4
-      with:
-        name: build
-        path: ./build
-
     - name: Deploy via SSH na EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -56,33 +17,9 @@ jobs:
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_KEY }}
         script: |
-          echo "=== Criando nova release..."
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          TARGET=/var/www/myapp/releases/$TIMESTAMP
-          sudo mkdir -p $TARGET
-          sudo rsync -av --delete ./build/ $TARGET/
-        
-          echo "=== Atualizando symlink atual..."
-          sudo ln -sfn $TARGET /var/www/myapp/current
-        
-          echo "=== Indo para a pasta atual..."
-          cd /var/www/myapp/current
-        
-          echo "=== Parando container antigo (se existir)..."
-          sudo docker stop pass-mais || true
-          sudo docker rm pass-mais || true
-        
-          echo "=== Construindo nova imagem Docker..."
-          sudo docker build -t pass-mais:latest .
-        
-          echo "=== Rodando novo container..."
-          sudo docker run -d \
-            --name pass-mais \
-            -p 3000:3000 \
-            --restart always \
-            pass-mais:latest
-        
-          echo "✅ Deploy concluído com Docker em $(date)"
+          cd ~/PassMais-frontend/pass-mais
+          git pull
+          sudo docker compose up --pull always --build -d
 
     - name: Marcar deploy OK no GitHub
       run: echo "🚀 Deploy finalizado com sucesso!!"
