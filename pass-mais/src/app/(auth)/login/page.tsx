@@ -1,21 +1,14 @@
 'use client';
 
 import LoginForm from "@/components/LoginForm";
-import Image from "next/image";
+import LoginImage from "@/components/LoginImage";
 import Link from 'next/link';
 
 export default function Login() {
 
     return (
         <div className="flex h-[100vh] w-[100vw]">
-            <Image
-                className="h-[100vh] w-min flex-none hidden lg:block"
-                src="/Login-image.png"
-                alt="Imagem da tela de login"
-                priority
-                width={500}
-                height={700}
-            />
+            <LoginImage />
 
             <div className="w-[33.75rem] mx-auto ">
 

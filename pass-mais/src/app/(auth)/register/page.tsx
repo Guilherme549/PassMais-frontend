@@ -1,6 +1,6 @@
 'use client';
 
-import Image from "next/image";
+import LoginImage from "@/components/LoginImage";
 import { useState } from 'react';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
@@ -37,14 +37,7 @@ export default function Register() {
 
     return (
         <div className="flex ">
-            <Image
-                className="h-[100vh] w-min flex-none hidden lg:block"
-                src="/Login-image.png"
-                alt="Imagem da tela de login"
-                priority
-                width={500}
-                height={700}
-            />
+            <LoginImage />
 
             <div className="w-[33.75rem] mx-auto ">
 
