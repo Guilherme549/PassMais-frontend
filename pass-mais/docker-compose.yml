@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  pass-mais:
+    container_name: pass-mais
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    restart: always
+    environment:
+      - NODE_ENV=production
