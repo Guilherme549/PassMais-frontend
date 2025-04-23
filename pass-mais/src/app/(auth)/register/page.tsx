@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useState } from 'react';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
-import LoginImage from "../../assets/Login-image.png";
 
 export default function Register() {
     const [showPassword, setShowPassword] = useState(false); // Controle da senha
@@ -39,10 +38,12 @@ export default function Register() {
     return (
         <div className="flex ">
             <Image
-                className="h-screen flex-none"
-                src={LoginImage}
-                alt="#"
-                width={1050}
+                className="h-[100vh] w-min flex-none hidden lg:block"
+                src="/Login-image.png"
+                alt="Imagem da tela de login"
+                priority
+                width={500}
+                height={700}
             />
 
             <div className="w-[33.75rem] mx-auto ">

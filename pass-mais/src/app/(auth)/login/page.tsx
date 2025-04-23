@@ -3,23 +3,23 @@
 import LoginForm from "@/components/LoginForm";
 import Image from "next/image";
 import Link from 'next/link';
-import LoginImage from "../../assets/Login-image.png";
 
 export default function Login() {
 
     return (
-        <div className="flex ">
+        <div className="flex h-[100vh] w-[100vw]">
             <Image
-                className="h-full flex-none"
-                src={LoginImage}
-                alt="#"
-                width={1050}
+                className="h-[100vh] w-min flex-none hidden lg:block"
+                src="/Login-image.png"
+                alt="Imagem da tela de login"
                 priority
+                width={500}
+                height={700}
             />
 
             <div className="w-[33.75rem] mx-auto ">
 
-                <div className="w-[22.5rem] mx-auto m-[100px]">
+                <div className="w-[22.1rem] mx-auto m-[100px]">
                     <h2 className="text-2xl font-semibold mb-[24px] text-center">Seja bem-vindo de volta</h2>
                     < LoginForm />
 

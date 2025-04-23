@@ -13,6 +13,11 @@ const handler = NextAuth({
         password: { label: "Password", type: "password" }
         },
         async authorize(credentials, req) {
+            function fixBugBuild(){
+                return req
+            }
+            fixBugBuild()
+            
             if(!credentials) {
                 return null;
             }
