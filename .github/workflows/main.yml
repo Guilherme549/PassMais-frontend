@@ -34,9 +34,8 @@ jobs:
       with:
         name: build
         path: |
-          dist
-          package.json
-          ecosystem.config.js
+          pass-mais/
+          pass-mais/Dockerfile
 
   deploy:
     needs: build
@@ -62,14 +61,29 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           TARGET=/var/www/myapp/releases/$TIMESTAMP
           sudo mkdir -p $TARGET
-          sudo rsync -av --delete ./build/ $TARGET/
+          sudo rsync -av --delete ./build/pass-mais/ $TARGET/
 
           echo "=== Atualizando symlink atual..."
           sudo ln -sfn $TARGET /var/www/myapp/current
 
-          echo "=== Reiniciando serviço com systemd..."
-          sudo systemctl restart myapp
-          echo "✅ Deploy concluído em $(date)"
+          echo "=== Indo para a pasta atual..."
+          cd /var/www/myapp/current
+
+          echo "=== Parando container antigo (se existir)..."
+          sudo docker stop myapp || true
+          sudo docker rm myapp || true
+
+          echo "=== Construindo nova imagem Docker..."
+          sudo docker build -t myapp:latest .
+
+          echo "=== Rodando novo container..."
+          sudo docker run -d \
+            --name myapp \
+            -p 3000:3000 \
+            --restart always \
+            myapp:latest
+
+          echo "✅ Deploy concluído com Docker em $(date)"
 
     - name: Marcar deploy OK no GitHub
       run: echo "🚀 Deploy finalizado com sucesso!"
