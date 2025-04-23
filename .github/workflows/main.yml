@@ -19,7 +19,7 @@ jobs:
         script: |
           cd ~/PassMais-frontend/pass-mais
           git pull
-          sudo docker rm -f pass-mais || true
+          sudo docker ps --filter "publish=3000" -q | xargs -r sudo docker rm -f
           sudo docker compose up --pull always --build -d
 
     - name: Marcar deploy OK no GitHub
