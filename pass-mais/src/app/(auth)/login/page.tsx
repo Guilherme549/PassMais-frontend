@@ -13,7 +13,7 @@ export default function Login() {
             <div className="w-[33.75rem] mx-auto ">
 
                 <div className="w-[22.1rem] mx-auto m-[100px]">
-                    <h2 className="text-2xl font-semibold mb-[24px] text-center">Seja bem-vindo de volta!!!</h2>
+                    <h2 className="text-2xl font-semibold mb-[24px] text-center">Seja bem-vindo de volta!!</h2>
                     < LoginForm />
 
                     <div className="size-12 font-regular text-center w-full line-we">
