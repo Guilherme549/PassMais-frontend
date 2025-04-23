@@ -1,0 +1,72 @@
+name: CI/CD – Deploy em EC2
+
+on:
+  push:
+    branches: [ "main" ]   # Dispara quando der push na main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Instalar dependências
+      run: npm ci
+
+    - name: Rodar testes
+      run: npm run test --if-present
+
+    - name: Build do projeto
+      run: npm run build --if-present
+
+    - name: Upload do artefato de build
+      uses: actions/upload-artifact@v4
+      with:
+        name: build
+        path: |
+          dist
+          package.json
+          ecosystem.config.js
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Baixar artefato
+      uses: actions/download-artifact@v4
+      with:
+        name: build
+        path: ./build
+
+    - name: Deploy via SSH na EC2
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_KEY }}
+        script: |
+          set -e
+          echo "=== Criando nova release..."
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          TARGET=/var/www/myapp/releases/$TIMESTAMP
+          sudo mkdir -p $TARGET
+          sudo rsync -av --delete ./build/ $TARGET/
+
+          echo "=== Atualizando symlink atual..."
+          sudo ln -sfn $TARGET /var/www/myapp/current
+
+          echo "=== Reiniciando serviço com systemd..."
+          sudo systemctl restart myapp
+          echo "✅ Deploy concluído em $(date)"
+
+    - name: Marcar deploy OK no GitHub
+      run: echo "🚀 Deploy finalizado com sucesso!"
