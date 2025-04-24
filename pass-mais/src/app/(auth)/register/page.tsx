@@ -145,7 +145,7 @@ export default function Register() {
                             </div>
 
                             <div className="text-center mb-[24px]">
-                                <button type="submit" className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px]">
+                                <button type="submit" className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px] cursor-pointer transition transform active:scale-95 duration-100">
                                     Criar conta
                                 </button>
                             </div>
