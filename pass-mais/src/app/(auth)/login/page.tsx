@@ -1,5 +1,6 @@
 'use client';
 
+import Footer from "@/components/Footer";
 import LoginForm from "@/components/LoginForm";
 import LoginImage from "@/components/LoginImage";
 import Link from 'next/link';
@@ -10,9 +11,9 @@ export default function Login() {
         <div className="flex h-[100vh] w-[100vw]">
             <LoginImage />
 
-            <div className="w-[33.75rem] mx-auto ">
+            <div className="w-[33.75rem] mx-auto m-[100px] mb-[0px]">
 
-                <div className="w-[22.1rem] mx-auto m-[100px]">
+                <div className="w-[22.1rem] mx-auto ">
                     <h2 className="text-2xl font-semibold mb-[24px] text-center">Seja bem-vindo de volta</h2>
                     < LoginForm />
 
@@ -23,8 +24,13 @@ export default function Login() {
                         </Link>
                     </div>
                 </div>
+                <div className="mt-[350px]">
+                    <Footer />
+                </div>
 
             </div>
+
         </div>
+
     )
 }

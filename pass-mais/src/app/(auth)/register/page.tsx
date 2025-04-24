@@ -1,18 +1,19 @@
 'use client';
 
+import Footer from "@/components/Footer";
 import LoginImage from "@/components/LoginImage";
 import { useState } from 'react';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
-
 export default function Register() {
-    const [showPassword, setShowPassword] = useState(false); // Controle da senha
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // Controle da confirmação da senha
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [formData, setFormData] = useState({
         email: '',
         password: '',
-        confirmPassword: '', // Campo de confirmação de senha
-        acceptTerms: false
+        confirmPassword: '',
+        phone: '',
+        acceptTerms: false,
     });
     const [error, setError] = useState('');
 
@@ -31,22 +32,22 @@ export default function Register() {
             return;
         }
         setError('');
-        // Aqui você pode fazer o envio do formulário
         console.log('Formulário enviado com sucesso');
     };
 
     return (
-        <div className="flex ">
-            <LoginImage />
+        <div className="min-h-screen flex flex-col">
+            {/* Conteúdo principal */}
+            <div className="flex flex-1">
+                <LoginImage />
 
-            <div className="w-[33.75rem] mx-auto ">
+                <div className="w-[33.75rem] mx-auto m-[100px] mb-[0px]">
+                    <div className="w-[22.5rem] mx-auto">
+                        <h2 className="text-2xl font-semibold mb-[24px] text-center">Criar uma conta</h2>
 
-                <div className="w-[22.5rem] mx-auto m-[100px]">
-                    <h2 className="text-2xl font-semibold mb-[24px] text-center">Criar uma conta</h2>
-                    <form onSubmit={handleSubmit}>
-                        <div>
+                        <form onSubmit={handleSubmit}>
                             <div>
-                                <label htmlFor="fullName" className="flex flex-col text-sm pl-[16px] pb-[8px]">Nome completo</label>
+                                <label htmlFor="fullName" className="block text-sm pl-[16px] pb-[8px]">Nome completo</label>
                                 <input
                                     id="fullName"
                                     type="text"
@@ -56,11 +57,11 @@ export default function Register() {
                             </div>
 
                             <div>
-                                <label htmlFor="email" className="flex flex-col text-sm pl-[16px] pb-[8px]">Email</label>
+                                <label htmlFor="email" className="block text-sm pl-[16px] pb-[8px]">Email</label>
                                 <input
                                     id="email"
-                                    type="email"
                                     name="email"
+                                    type="email"
                                     value={formData.email}
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
@@ -69,20 +70,21 @@ export default function Register() {
                             </div>
 
                             <div>
-                                <label htmlFor="phone" className="flex flex-col text-sm pl-[16px] pb-[8px]">Telefone</label>
+                                <label htmlFor="phone" className="block text-sm pl-[16px] pb-[8px]">Telefone</label>
                                 <input
                                     id="phone"
-                                    type="number"
                                     name="phone"
+                                    type="text"
+                                    value={formData.phone}
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
-                                    placeholder="Digite o seu numero de telefone"
+                                    placeholder="Digite o seu número de telefone"
                                 />
                             </div>
 
-                            <div className='relative'>
-                                <label htmlFor="password" className="flex flex-col text-sm pl-[16px] pb-[8px]">Senha</label>
-                                <div className='relative mb-[20px]'>
+                            <div className="relative">
+                                <label htmlFor="password" className="block text-sm pl-[16px] pb-[8px]">Senha</label>
+                                <div className="relative mb-[20px]">
                                     <input
                                         id="password"
                                         name="password"
@@ -93,8 +95,8 @@ export default function Register() {
                                         placeholder="Crie sua senha"
                                     />
                                     <button
+                                        type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        type='button'
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
                                         {showPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
@@ -102,22 +104,21 @@ export default function Register() {
                                 </div>
                             </div>
 
-                            {/* Campo de confirmação de senha */}
-                            <div className='relative'>
-                                <label htmlFor="confirmPassword" className="flex flex-col text-sm pl-[16px] pb-[8px]">Confirme sua senha</label>
-                                <div className='relative mb-[20px]'>
+                            <div className="relative">
+                                <label htmlFor="confirmPassword" className="block text-sm pl-[16px] pb-[8px]">Confirme sua senha</label>
+                                <div className="relative mb-[20px]">
                                     <input
                                         id="confirmPassword"
                                         name="confirmPassword"
-                                        type={showConfirmPassword ? "text" : "password"} // Controle separado para a confirmação de senha
+                                        type={showConfirmPassword ? "text" : "password"}
                                         value={formData.confirmPassword}
                                         onChange={handleInputChange}
                                         className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
                                         placeholder="Confirme sua senha"
                                     />
                                     <button
-                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)} // Toggling para confirmação de senha
-                                        type='button'
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
                                         {showConfirmPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
@@ -125,38 +126,34 @@ export default function Register() {
                                 </div>
                             </div>
 
-                            {/* Exibição de erro se as senhas não coincidirem */}
-                            {error && <p className="text-red-500 text-sm">{error}</p>}
+                            {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
 
-                            <div className="flex items-start">
-                                <div className="flex items-center h-5">
-                                    <input
-                                        type="checkbox"
-                                        id="acceptTerms"
-                                        name="acceptTerms"
-                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div className="ml-3">
-                                    <label htmlFor="acceptTerms" className="text-sm text-gray-500">
-                                        Li e concordo com os{' '}
-                                        <a href="#" className="text-blue-600 hover:text-blue-800">
-                                            Termos e condições
-                                        </a>{' '}
-                                        e{' '}
-                                        <a href="#" className="text-blue-600 hover:text-blue-800">
-                                            política de privacidade
-                                        </a>
-                                    </label>
-                                </div>
+                            <div className="flex items-start mb-4">
+                                <input
+                                    type="checkbox"
+                                    id="acceptTerms"
+                                    name="acceptTerms"
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={formData.acceptTerms}
+                                    onChange={handleInputChange}
+                                />
+                                <label htmlFor="acceptTerms" className="ml-2 text-sm text-gray-500">
+                                    Li e concordo com os{' '}
+                                    <a href="#" className="text-blue-600 hover:text-blue-800">Termos e condições</a> e{' '}
+                                    <a href="#" className="text-blue-600 hover:text-blue-800">política de privacidade</a>
+                                </label>
                             </div>
 
-                        </div>
-                        <div className="text-center mb-[24px]">
-                            <button type="submit" className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px]">Criar conta</button>
-                        </div>
-
-                    </form>
+                            <div className="text-center mb-[24px]">
+                                <button type="submit" className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px]">
+                                    Criar conta
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div className="mt-[141px]">
+                        <Footer />
+                    </div>
                 </div>
 
             </div>
