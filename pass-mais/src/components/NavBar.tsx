@@ -17,14 +17,14 @@ export default function NavBar() {
 
                 <div className="flex items-center gap-12 relative">
                     <Link href="#">
-                        <span className="text-gray-700 text-base font-medium hover:text-[#1078B0] transition-colors">
+                        <span className="text-gray-700 hover:text-[#1078B0] transition-colors text-xl">
                             Minhas consultas
                         </span>
                     </Link>
 
                     <button
                         onClick={() => setIsMenuOpen(prev => !prev)}
-                        className="flex items-center gap-1 text-gray-700 text-base font-medium hover:text-[#1078B0] transition-colors focus:outline-none cursor-pointer"
+                        className="flex items-center gap-1 text-gray-700 text-xl hover:text-[#1078B0] transition-colors focus:outline-none cursor-pointer"
                     >
                         Minha conta <ChevronDown size={18} />
                     </button>
