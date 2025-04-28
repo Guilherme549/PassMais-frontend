@@ -10,6 +10,8 @@ export default function LoginImage() {
             priority
             width={500}
             height={700}
+            placeholder="blur"
+            blurDataURL="/Login-image.png"
         />
     );
 }
