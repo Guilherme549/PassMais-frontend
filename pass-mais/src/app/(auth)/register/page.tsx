@@ -1,7 +1,7 @@
 'use client';
 
+import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
-import LoginImage from "@/components/LoginImage";
 import { useState } from 'react';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 

@@ -1,8 +1,8 @@
 'use client';
 
+import LoginForm from "@/app/(auth)/components/LoginForm";
+import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
-import LoginForm from "@/components/LoginForm";
-import LoginImage from "@/components/LoginImage";
 import Link from 'next/link';
 
 export default function Login() {

@@ -57,7 +57,7 @@ export default function LoginForm() {
                 </div>
 
                 <div className="text-center mb-[32px]">
-                    <Link href="/register">
+                    <Link href="/reset-password">
                         <span className="text-[#007AFF]">Esqueceu a senha?</span>
                     </Link>
                 </div>
