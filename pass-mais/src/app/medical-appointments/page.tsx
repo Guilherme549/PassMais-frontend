@@ -14,7 +14,8 @@ export default async function MedicalAppointments() {
         <div>
             <NavBar />
             <div className="flex justify-center items-center w-full">
-                <div className="w-[71.25rem]">
+                <div className="w-[76rem]">
+                    <h2 className="text-[32px] text-black font-semibold mt-[41px] mb-[45px]  px-1">Encontre seu médico</h2>
                     <SearchBar />
                 </div>
             </div>

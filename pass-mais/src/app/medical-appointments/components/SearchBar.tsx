@@ -4,7 +4,7 @@ import { ChevronDown, Search } from "lucide-react";
 
 export default function SearchBar() {
     return (
-        <div className="w-full flex justify-center px-4">
+        <div className="w-full flex px-1">
             <form className="w-full max-w-5xl flex flex-col md:flex-row gap-4 md:gap-3">
                 {/* Campo de Especialidade Médica */}
                 <div className="flex flex-col w-full">
