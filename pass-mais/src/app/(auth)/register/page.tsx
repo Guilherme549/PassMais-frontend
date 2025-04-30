@@ -2,6 +2,7 @@
 
 import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
+import Link from "next/link";
 import { useState } from 'react';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
@@ -150,8 +151,14 @@ export default function Register() {
                                 </button>
                             </div>
                         </form>
+
+                        <hr className="h-[1px] text-[#E5E5E5] w-full" />
+                        <span className="flex justify-center text-sm text-gray-500 mt-[5px]">ou</span>
+                        <Link href="/">
+                            <span className="text-blue-600 hover:text-blue-800 text-sm flex justify-center mt-[10px]"> Faça login em sua conta</span>
+                        </Link>
                     </div>
-                    <div className="mt-[141px]">
+                    <div className="mt-[65px]">
                         <Footer />
                     </div>
                 </div>
