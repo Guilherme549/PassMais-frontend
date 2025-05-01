@@ -27,11 +27,8 @@ jobs:
       run: |
         cd pass-mais
         docker build -t pass-mais:latest .
-        docker tag pass-mais:latest $ECR_REPOSITORY_URI/$ECR_REPOSITORY:latest
-        docker push $ECR_REPOSITORY_URI/$ECR_REPOSITORY:latest
-      env:
-        ECR_REPOSITORY_URI: 061051235116.dkr.ecr.us-east-1.amazonaws.com
-        ECR_REPOSITORY: pass-mais
+        docker tag pass-mais:latest ${{ secrets.ECR_REPOSITORY_URI }}/${{ secrets.ECR_REPOSITORY }}:latest
+        docker push ${{ secrets.ECR_REPOSITORY_URI }}/${{ secrets.ECR_REPOSITORY }}:latest
 
     - name: Forçar redeploy no ECS com imagem :latest
       run: |
