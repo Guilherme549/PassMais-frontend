@@ -29,7 +29,7 @@ export default function DoctorCard() {
                         </div>
                         <div className="pt-2">
                             <span className="text-lg font-semibold text-gray-900">Endereço:</span>
-                            <p className="text-lg text-gray-600 leading-relaxed">
+                            <p className="text-lg text-gray-600 leading-relaxed w-[500px]">
                                 R. Ana Luiza Souza, Qd. 24 - Lt. 288 - Jundiaí, Anápolis - GO, 75110-030
                             </p>
                         </div>
