@@ -74,7 +74,8 @@ export default function NavBar() {
                         <button
                             onClick={toggleUserMenu}
                             className="flex items-center gap-2 text-gray-700 text-lg font-medium 
-                                hover:text-blue-600 transition-colors duration-200 focus:outline-none"
+                                hover:text-blue-600 focus:outline-none hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
+                        transition-all duration-200 transform hover:-translate-y-0.5"
                         >
                             Minha conta <ChevronDown size={20} className="text-gray-500" />
                         </button>

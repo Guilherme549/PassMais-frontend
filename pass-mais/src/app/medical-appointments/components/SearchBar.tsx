@@ -51,7 +51,9 @@ export default function SearchBar() {
                 {/* Botão de Pesquisa */}
                 <div className="flex items-end">
                     <button
-                        className="w-full md:w-40 h-12 bg-[#5179EF] text-white rounded-lg flex items-center justify-center cursor-pointer transition transform active:scale-95 duration-100 text-base md:text-lg"
+                        className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
+                        hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
+                        transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2"
                     >
                         <Search size={18} className="mr-1" />
                         <span>Pesquisar</span>
