@@ -51,7 +51,7 @@ export default function SearchBar() {
                 {/* Botão de Pesquisa */}
                 <div className="flex items-end">
                     <button
-                        className="w-full md:w-40 h-12 bg-blue-600 text-white rounded-lg flex items-center justify-center cursor-pointer transition transform active:scale-95 duration-100 text-base md:text-lg"
+                        className="w-full md:w-40 h-12 bg-[#5179EF] text-white rounded-lg flex items-center justify-center cursor-pointer transition transform active:scale-95 duration-100 text-base md:text-lg"
                     >
                         <Search size={18} className="mr-1" />
                         <span>Pesquisar</span>
