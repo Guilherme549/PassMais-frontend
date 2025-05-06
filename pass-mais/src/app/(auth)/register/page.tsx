@@ -4,12 +4,16 @@ import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
+import { FaCheckCircle } from "react-icons/fa";
 
 export default function Register() {
+    const router = useRouter();
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [formData, setFormData] = useState({
+        fullName: '',
         email: '',
         password: '',
         confirmPassword: '',
@@ -17,6 +21,7 @@ export default function Register() {
         acceptTerms: false,
     });
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
@@ -26,14 +31,62 @@ export default function Register() {
         }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
+        setSuccess('');
+
+        // Validação: Verificar se as senhas coincidem
         if (formData.password !== formData.confirmPassword) {
             setError('As senhas não coincidem');
             return;
         }
-        setError('');
-        console.log('Formulário enviado com sucesso');
+
+        // Validação: Verificar se os termos foram aceitos
+        if (!formData.acceptTerms) {
+            setError('Você deve aceitar os termos e condições');
+            return;
+        }
+
+        // Dados a serem enviados
+        const userData = {
+            name: formData.fullName,
+            email: formData.email,
+            phone: formData.phone,
+            password: formData.password
+        };
+
+        try {
+            const response = await fetch('http://localhost:3333/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(userData),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Erro ao criar conta');
+            }
+
+            // Sucesso: Exibir mensagem e redirecionar após 2 segundos
+            setSuccess('Usuário criado com sucesso!');
+            setTimeout(() => {
+                router.push('/');
+            }, 2000);
+
+        } catch (err: unknown) {
+            // Type guard para lidar com erros
+            let errorMessage = 'Ocorreu um erro. Tente novamente.';
+            if (err instanceof Error) {
+                errorMessage = err.message.includes('Failed to fetch')
+                    ? 'Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde.'
+                    : err.message;
+            }
+            setError(errorMessage);
+            console.error('Erro na requisição:', err);
+        }
     };
 
     return (
@@ -46,14 +99,26 @@ export default function Register() {
                     <div className="w-[22.5rem] mx-auto">
                         <h2 className="text-2xl font-semibold mb-[24px] text-center">Criar uma conta</h2>
 
+                        {success && (
+                            <div className="flex items-center justify-center bg-green-100 text-green-800 text-base font-semibold p-4 mb-4 rounded-lg shadow-md animate-fade-in">
+                                <FaCheckCircle className="mr-2 text-green-600" size={20} />
+                                {success}
+                            </div>
+                        )}
+                        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+
                         <form onSubmit={handleSubmit}>
                             <div>
                                 <label htmlFor="fullName" className="block text-sm pl-[16px] pb-[8px]">Nome completo</label>
                                 <input
                                     id="fullName"
+                                    name="fullName"
                                     type="text"
+                                    value={formData.fullName}
+                                    onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Digite seu nome completo"
+                                    required
                                 />
                             </div>
 
@@ -67,6 +132,7 @@ export default function Register() {
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Insira o seu email"
+                                    required
                                 />
                             </div>
 
@@ -80,6 +146,7 @@ export default function Register() {
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Digite o seu número de telefone"
+                                    required
                                 />
                             </div>
 
@@ -94,6 +161,7 @@ export default function Register() {
                                         onChange={handleInputChange}
                                         className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
                                         placeholder="Crie sua senha"
+                                        required
                                     />
                                     <button
                                         type="button"
@@ -116,6 +184,7 @@ export default function Register() {
                                         onChange={handleInputChange}
                                         className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
                                         placeholder="Confirme sua senha"
+                                        required
                                     />
                                     <button
                                         type="button"
@@ -126,8 +195,6 @@ export default function Register() {
                                     </button>
                                 </div>
                             </div>
-
-                            {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
 
                             <div className="flex items-start mb-4">
                                 <input
@@ -162,7 +229,6 @@ export default function Register() {
                         <Footer />
                     </div>
                 </div>
-
             </div>
         </div>
     );
