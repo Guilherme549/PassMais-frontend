@@ -9,3 +9,9 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
+    networks:
+      - passmais-network
+
+networks:
+  passmais-network:
+    external: true
