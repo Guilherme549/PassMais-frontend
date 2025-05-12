@@ -9,6 +9,7 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api:3333
     networks:
       - passmais-network
 
