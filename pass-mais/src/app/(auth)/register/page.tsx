@@ -3,10 +3,10 @@
 import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
 import Link from "next/link";
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { IoMdEye, IoMdEyeOff } from "react-icons/io";
+import { useState } from 'react';
 import { FaCheckCircle } from "react-icons/fa";
+import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
 export default function Register() {
     const router = useRouter();
@@ -57,7 +57,7 @@ export default function Register() {
         };
 
         try {
-            const response = await fetch('http://localhost:3333/users', {
+            const response = await fetch('http://3.85.78.106:3333/users', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -83,6 +83,8 @@ export default function Register() {
                 errorMessage = err.message.includes('Failed to fetch')
                     ? 'Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde.'
                     : err.message;
+
+                console.log(err)
             }
             setError(errorMessage);
             console.error('Erro na requisição:', err);
