@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 
 interface Doctor {
     id: number;
@@ -64,14 +65,15 @@ export default function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
                     </div>
                 </div>
                 <div className="flex items-end mt-6 sm:mt-0">
-                    <button
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
-              hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
-              transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer"
-                    >
-                        Agendar Consulta
-                    </button>
+                    <Link href={`/doctor-profile/${doctor.id}`}>
+                        <button
+                            className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
+                hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
+                transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer"
+                        >
+                            Agendar Consulta
+                        </button>
+                    </Link>
                 </div>
             </div>
         </div>
