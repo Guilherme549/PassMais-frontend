@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import ClientDoctorProfile from "./components/ClientDoctorProfile";
 
+// Definir a interface do médico
 interface Doctor {
     id: number;
     name: string;
@@ -15,11 +16,8 @@ interface Doctor {
     availableSlots: { date: string; times: string[] }[];
 }
 
-interface Params {
-    params: { id: string };
-}
-
-export default async function DoctorProfile({ params }: Params) {
+// Usar uma tipagem genérica para evitar o erro com PageProps
+export default async function DoctorProfile({ params }: any) {
     const session = await getServerSession();
 
     if (!session) {
@@ -78,7 +76,9 @@ export default async function DoctorProfile({ params }: Params) {
         },
     ];
 
-    const doctor = doctors.find((doc) => doc.id === parseInt(params.id));
+    // Acessar params.id de forma explícita
+    const doctorId = parseInt(params.id);
+    const doctor = doctors.find((doc) => doc.id === doctorId);
 
     if (!doctor) {
         redirect("/medical-appointments");
