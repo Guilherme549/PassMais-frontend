@@ -16,17 +16,17 @@ const UserMenu: React.FC = () => {
 
             {/* Links */}
             <div className="flex flex-col">
-                <Link href="#" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
+                <Link href="/medical-appointments" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
                     hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 border-b">
                     <Home size={18} /> Início
                 </Link>
 
-                <Link href="#" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
+                <Link href="/minhas-consultas" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
                     hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 border-b">
                     <Calendar size={18} /> Minhas consultas
                 </Link>
 
-                <Link href="#" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
+                <Link href="/my-profile" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
                     hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 border-b">
                     <User size={18} /> Meu perfil
                 </Link>

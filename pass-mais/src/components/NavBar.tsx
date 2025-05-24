@@ -21,18 +21,19 @@ export default function NavBar() {
     return (
         <nav className="h-16 w-full bg-white shadow-md fixed top-0 z-50">
             <div className="flex justify-between items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
-                <Link href="/">
+                <Link href="/medical-appointments">
                     <span className="text-blue-600 font-bold text-3xl tracking-tight">Pass+</span>
                 </Link>
 
                 {/* Menu Desktop */}
                 <div className="hidden md:flex items-center gap-10 relative">
-                    <Link href="#">
+                    <Link href="/minhas-consultas">
                         <span className="text-gray-700 text-lg font-medium hover:text-blue-600 
                             transition-colors duration-200">
                             Minhas consultas
                         </span>
                     </Link>
+
 
                     <button
                         onClick={toggleUserMenu}
