@@ -262,13 +262,13 @@ export default function Register() {
                         <hr className="h-[1px] text-[#E5E5E5] w-full" />
                         <span className="flex justify-center text-sm text-gray-500 mt-[5px]">ou</span>
                         <div className="text-center">
-                            <Link href="/login">
+                            <Link href="/medicos/login-medico">
                                 <span className="text-[#5179EF] hover:text-blue-800 text-sm mt-[10px]">
                                     Já tem uma conta? Acesse
                                 </span>
                             </Link>
                             <br />
-                            <Link href="/register/patient">
+                            <Link href="/register">
                                 <span className="text-[#5179EF] hover:text-blue-800 text-sm mt-[10px]">
                                     É um paciente? Faça seu cadastro aqui
                                 </span>
