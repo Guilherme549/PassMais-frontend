@@ -53,7 +53,7 @@ export default function SearchBar() {
                     <button
                         className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
                         hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
-                        transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2"
+                        transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2 cursor-pointer"
                     >
                         <Search size={18} className="mr-1" />
                         <span>Pesquisar</span>
