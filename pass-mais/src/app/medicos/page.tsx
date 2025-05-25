@@ -91,13 +91,13 @@ export default function Medicos() {
                     </p>
                     <div className="flex justify-center gap-4">
                         <Link
-                            href="/register"
+                            href="/medicos/register-medico"
                             className="bg-[#5179EF] text-white font-medium px-8 py-4 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
                             Cadastrar
                         </Link>
                         <Link
-                            href="/login"
+                            href="/medicos/login-medico"
                             className="bg-transparent border-2 border-[#5179EF] text-[#5179EF] font-medium px-8 py-4 rounded-lg hover:bg-[#5179EF] hover:text-white focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
                             Entrar
