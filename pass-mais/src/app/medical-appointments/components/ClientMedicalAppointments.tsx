@@ -1,8 +1,12 @@
 "use client";
 
+import NavBar from "@/components/NavBar";
 import { Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import DoctorModal from "./DoctorModal";
+import SearchBar from "./SearchBar";
 
 interface Doctor {
   id: number;
@@ -16,7 +20,7 @@ interface Doctor {
 
 interface DoctorCardProps {
   doctor: Doctor;
-  onCardClick?: (doctor: Doctor) => void; // Prop opcional para lidar com o clique no card
+  onCardClick?: (doctor: Doctor) => void; // Adicionando a prop onCardClick como opcional
 }
 
 function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
@@ -92,35 +96,82 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
   );
 }
 
-interface ClientMedicalAppointmentsProps {
-  doctors: Doctor[]; // Definimos a prop doctors como um array de Doctor
-}
+export default function ClientMedicalAppointments({
+  doctors,
+}: {
+  doctors: Doctor[] | null;
+}) {
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [loadedDoctors, setLoadedDoctors] = useState<Doctor[] | null>(doctors);
+  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[] | null>(doctors);
 
-export default function ClientMedicalAppointments({ doctors }: ClientMedicalAppointmentsProps) {
-  // Função de exemplo para lidar com o clique no card
+  useEffect(() => {
+    console.log("Doctors recebidos em ClientMedicalAppointments:", doctors);
+    setLoadedDoctors(doctors);
+    setFilteredDoctors(doctors); // Inicializa os médicos filtrados com todos os médicos
+  }, [doctors]);
+
   const handleCardClick = (doctor: Doctor) => {
-    console.log("Clicou no card do médico:", doctor.name);
-    // Adicione aqui a lógica para abrir o modal ou redirecionar, se necessário
+    setSelectedDoctor(doctor);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedDoctor(null);
+  };
+
+  // Função para lidar com a submissão do formulário de busca
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const specialty = formData.get("medical-specialty")?.toString() || "";
+    const city = formData.get("city-region")?.toString() || "";
+
+    if (!loadedDoctors) {
+      setFilteredDoctors(null);
+      return;
+    }
+
+    // Filtra os médicos com base nos campos de especialidade e cidade
+    const filtered = loadedDoctors.filter((doctor) => {
+      const matchesSpecialty =
+        specialty === "" ||
+        doctor.specialty.toLowerCase().includes(specialty.toLowerCase());
+      const matchesCity =
+        city === "" ||
+        doctor.address.toLowerCase().includes(city.toLowerCase());
+      return matchesSpecialty && matchesCity;
+    });
+
+    setFilteredDoctors(filtered);
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 py-10">
-      <div className="max-w-6xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Médicos Disponíveis</h1>
-        <div className="space-y-6">
-          {doctors.length > 0 ? (
-            doctors.map((doctor) => (
-              <DoctorCard
-                key={doctor.id}
-                doctor={doctor}
-                onCardClick={handleCardClick}
-              />
-            ))
-          ) : (
-            <p className="text-gray-500">Nenhum médico disponível no momento.</p>
-          )}
+    <div className="min-h-screen bg-gray-50">
+      <NavBar />
+      <div className="flex justify-center items-center w-full px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-5xl">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-[100px] mb-10 px-2 tracking-tight">
+            Encontre seu médico
+          </h2>
+          <div className="space-y-8">
+            <SearchBar onSubmit={handleSearch} />
+            {filteredDoctors && filteredDoctors.length > 0 ? (
+              filteredDoctors.map((doctor) => (
+                <DoctorCard
+                  key={doctor.id}
+                  doctor={doctor}
+                  onCardClick={handleCardClick}
+                />
+              ))
+            ) : (
+              <p className="text-gray-600 text-lg">Nenhum médico encontrado ou dados não carregados.</p>
+            )}
+          </div>
         </div>
       </div>
+      {selectedDoctor && (
+        <DoctorModal doctor={selectedDoctor} onClose={handleCloseModal} />
+      )}
     </div>
   );
 }

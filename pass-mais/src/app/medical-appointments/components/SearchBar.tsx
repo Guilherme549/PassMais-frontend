@@ -2,10 +2,14 @@
 
 import { ChevronDown, Search } from "lucide-react";
 
-export default function SearchBar() {
+interface SearchBarProps {
+    onSubmit: (e: React.FormEvent<HTMLFormElement>) => void; // Prop para lidar com a submissão do formulário
+}
+
+export default function SearchBar({ onSubmit }: SearchBarProps) {
     return (
         <div className="w-full flex px-1">
-            <form className="w-full max-w-5xl flex flex-col md:flex-row gap-4 md:gap-3">
+            <form className="w-full max-w-5xl flex flex-col md:flex-row gap-4 md:gap-3" onSubmit={onSubmit}>
                 {/* Campo de Especialidade Médica */}
                 <div className="flex flex-col w-full">
                     <label
@@ -51,9 +55,10 @@ export default function SearchBar() {
                 {/* Botão de Pesquisa */}
                 <div className="flex items-end">
                     <button
+                        type="submit"
                         className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
-                        hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
-                        transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2 cursor-pointer"
+            hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
+            transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2 cursor-pointer"
                     >
                         <Search size={18} className="mr-1" />
                         <span>Pesquisar</span>
