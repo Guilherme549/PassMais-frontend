@@ -1,10 +1,11 @@
 import Link from "next/link";
+import NavBarMedicos from "./components/NavBarMedicos";
 
 export default function Medicos() {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* NavBar */}
-
+            <NavBarMedicos />
 
             {/* Cabeçalho */}
             <section className="bg-gradient-to-r from-[#5179EF] to-blue-600 text-white py-20 mt-[80px]">
@@ -17,13 +18,13 @@ export default function Medicos() {
                     </p>
                     <div className="flex justify-center gap-4">
                         <Link
-                            href="/medicos/register-medico"
+                            href="/register"
                             className="bg-white text-[#5179EF] font-medium px-8 py-4 rounded-lg hover:bg-gray-100 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
-                            Cadastrar-se
+                            Cadastrar
                         </Link>
                         <Link
-                            href="/medicos/login-medico"
+                            href="/login"
                             className="bg-transparent border-2 border-white text-white font-medium px-8 py-4 rounded-lg hover:bg-white hover:text-[#5179EF] focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
                             Entrar
@@ -93,13 +94,13 @@ export default function Medicos() {
                             href="/register"
                             className="bg-[#5179EF] text-white font-medium px-8 py-4 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
-                            Cadastrar-se Agora
+                            Cadastrar
                         </Link>
                         <Link
                             href="/login"
                             className="bg-transparent border-2 border-[#5179EF] text-[#5179EF] font-medium px-8 py-4 rounded-lg hover:bg-[#5179EF] hover:text-white focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
                         >
-                            Já Tenho Conta
+                            Entrar
                         </Link>
                     </div>
                 </div>
@@ -142,7 +143,7 @@ export default function Medicos() {
                         </div>
                     </div>
                     <div className="mt-8 text-center text-gray-400">
-                        &copy; 2025 Pass+. Todos os direitos reservados.
+                        © 2025 Pass+. Todos os direitos reservados.
                     </div>
                 </div>
             </footer>
