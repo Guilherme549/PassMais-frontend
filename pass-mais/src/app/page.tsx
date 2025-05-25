@@ -76,7 +76,7 @@ export default function Home() {
                 alt="Pessoa usando o app no celular"
                 width={500} // Ajuste conforme o tamanho real da imagem
                 height={500} // Ajuste conforme o tamanho real da imagem
-                className="w-full max-w-md mx-auto"
+                className="w-full max-w-md mx-auto rounded-4xl"
               />
             </div>
           </div>
