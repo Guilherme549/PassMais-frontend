@@ -38,13 +38,13 @@ export default function NavBarMedicos() {
                         </select>
                     </div>
                     <Link
-                        href={isMedico ? "/register" : "/register/patient"}
+                        href={isMedico ? "/medicos/register-medico" : "/register/patient"}
                         className="text-gray-600 hover:text-[#5179EF] transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
                     >
                         Cadastrar
                     </Link>
                     <Link
-                        href={isMedico ? "/login" : "/login/patient"}
+                        href={isMedico ? "/medicos/login-medico" : "/login/patient"}
                         className="text-gray-600 hover:text-[#5179EF] transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
                     >
                         Entrar
