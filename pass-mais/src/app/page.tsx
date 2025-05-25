@@ -72,11 +72,11 @@ export default function Home() {
             {/* Imagem */}
             <div className="flex-1">
               <Image
-                src="/peopleUsingTheSite.png"
+                src="/peopleUsingTheSite.png" // Certifique-se de que a imagem está na pasta public
                 alt="Pessoa usando o app no celular"
-                className="w-full max-w-md mx-auto rounded-3xl shadow-lg"
-                width={100}
-                height={100}
+                width={500} // Ajuste conforme o tamanho real da imagem
+                height={500} // Ajuste conforme o tamanho real da imagem
+                className="w-full max-w-md mx-auto"
               />
             </div>
           </div>
