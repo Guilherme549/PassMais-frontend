@@ -223,7 +223,7 @@ export default function Register() {
 
                         <hr className="h-[1px] text-[#E5E5E5] w-full" />
                         <span className="flex justify-center text-sm text-gray-500 mt-[5px]">ou</span>
-                        <Link href="/">
+                        <Link href="/login">
                             <span className="text-blue-600 hover:text-blue-800 text-sm flex justify-center mt-[10px]"> Faça login em sua conta</span>
                         </Link>
                     </div>
