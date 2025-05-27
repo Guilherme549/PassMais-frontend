@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
 import LoginImage from "@/app/(auth)/components/LoginImage";
 import Footer from "@/components/Footer";
 import Link from "next/link";
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { FaCheckCircle } from "react-icons/fa";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
@@ -13,38 +13,38 @@ export default function Register() {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [formData, setFormData] = useState({
-        fullName: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        phone: '',
+        fullName: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        phone: "",
         acceptTerms: false,
     });
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
-        setFormData(prev => ({
+        setFormData((prev) => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === "checkbox" ? checked : value,
         }));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setSuccess('');
+        setError("");
+        setSuccess("");
 
         // Validação: Verificar se as senhas coincidem
         if (formData.password !== formData.confirmPassword) {
-            setError('As senhas não coincidem');
+            setError("As senhas não coincidem");
             return;
         }
 
         // Validação: Verificar se os termos foram aceitos
         if (!formData.acceptTerms) {
-            setError('Você deve aceitar os termos e condições');
+            setError("Você deve aceitar os termos e condições");
             return;
         }
 
@@ -53,53 +53,51 @@ export default function Register() {
             name: formData.fullName,
             email: formData.email,
             phone: formData.phone,
-            password: formData.password
+            password: formData.password,
         };
 
         try {
-            const response = await fetch('http://3.85.78.106:3333/users', {
-                method: 'POST',
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify(userData),
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Erro ao criar conta');
+                throw new Error(errorData.message || "Erro ao criar conta");
             }
 
             // Sucesso: Exibir mensagem e redirecionar após 2 segundos
-            setSuccess('Usuário criado com sucesso!');
+            setSuccess("Usuário criado com sucesso!");
             setTimeout(() => {
-                router.push('/');
+                router.push("/");
             }, 2000);
-
         } catch (err: unknown) {
-            // Type guard para lidar com erros
-            let errorMessage = 'Ocorreu um erro. Tente novamente.';
+            let errorMessage = "Ocorreu um erro. Tente novamente.";
             if (err instanceof Error) {
-                errorMessage = err.message.includes('Failed to fetch')
-                    ? 'Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde.'
-                    : err.message;
-
-                console.log(err)
+                errorMessage =
+                    err.message.includes("Failed to fetch")
+                        ? "Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde."
+                        : err.message;
             }
             setError(errorMessage);
-            console.error('Erro na requisição:', err);
+            console.error("Erro na requisição:", err);
         }
     };
 
     return (
         <div className="min-h-screen flex flex-col">
-            {/* Conteúdo principal */}
             <div className="flex flex-1">
                 <LoginImage />
 
                 <div className="w-[33.75rem] mx-auto m-[100px] mb-[0px]">
                     <div className="w-[22.5rem] mx-auto">
-                        <h2 className="text-2xl font-semibold mb-[24px] text-center">Criar uma conta</h2>
+                        <h2 className="text-2xl font-semibold mb-[24px] text-center">
+                            Criar uma conta
+                        </h2>
 
                         {success && (
                             <div className="flex items-center justify-center bg-green-100 text-green-800 text-base font-semibold p-4 mb-4 rounded-lg shadow-md animate-fade-in">
@@ -111,7 +109,12 @@ export default function Register() {
 
                         <form onSubmit={handleSubmit}>
                             <div>
-                                <label htmlFor="fullName" className="block text-sm pl-[16px] pb-[8px]">Nome completo</label>
+                                <label
+                                    htmlFor="fullName"
+                                    className="block text-sm pl-[16px] pb-[8px]"
+                                >
+                                    Nome completo
+                                </label>
                                 <input
                                     id="fullName"
                                     name="fullName"
@@ -125,7 +128,12 @@ export default function Register() {
                             </div>
 
                             <div>
-                                <label htmlFor="email" className="block text-sm pl-[16px] pb-[8px]">Email</label>
+                                <label
+                                    htmlFor="email"
+                                    className="block text-sm pl-[16px] pb-[8px]"
+                                >
+                                    Email
+                                </label>
                                 <input
                                     id="email"
                                     name="email"
@@ -139,7 +147,12 @@ export default function Register() {
                             </div>
 
                             <div>
-                                <label htmlFor="phone" className="block text-sm pl-[16px] pb-[8px]">Telefone</label>
+                                <label
+                                    htmlFor="phone"
+                                    className="block text-sm pl-[16px] pb-[8px]"
+                                >
+                                    Telefone
+                                </label>
                                 <input
                                     id="phone"
                                     name="phone"
@@ -153,7 +166,12 @@ export default function Register() {
                             </div>
 
                             <div className="relative">
-                                <label htmlFor="password" className="block text-sm pl-[16px] pb-[8px]">Senha</label>
+                                <label
+                                    htmlFor="password"
+                                    className="block text-sm pl-[16px] pb-[8px]"
+                                >
+                                    Senha
+                                </label>
                                 <div className="relative mb-[20px]">
                                     <input
                                         id="password"
@@ -170,13 +188,22 @@ export default function Register() {
                                         onClick={() => setShowPassword(!showPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
-                                        {showPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
+                                        {showPassword ? (
+                                            <IoMdEye size={20} />
+                                        ) : (
+                                            <IoMdEyeOff size={20} />
+                                        )}
                                     </button>
                                 </div>
                             </div>
 
                             <div className="relative">
-                                <label htmlFor="confirmPassword" className="block text-sm pl-[16px] pb-[8px]">Confirme sua senha</label>
+                                <label
+                                    htmlFor="confirmPassword"
+                                    className="block text-sm pl-[16px] pb-[8px]"
+                                >
+                                    Confirme sua senha
+                                </label>
                                 <div className="relative mb-[20px]">
                                     <input
                                         id="confirmPassword"
@@ -193,7 +220,11 @@ export default function Register() {
                                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
-                                        {showConfirmPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
+                                        {showConfirmPassword ? (
+                                            <IoMdEye size={20} />
+                                        ) : (
+                                            <IoMdEyeOff size={20} />
+                                        )}
                                     </button>
                                 </div>
                             </div>
@@ -207,24 +238,39 @@ export default function Register() {
                                     checked={formData.acceptTerms}
                                     onChange={handleInputChange}
                                 />
-                                <label htmlFor="acceptTerms" className="ml-2 text-sm text-gray-500">
-                                    Li e concordo com os{' '}
-                                    <a href="#" className="text-blue-600 hover:text-blue-800">Termos e condições</a> e{' '}
-                                    <a href="#" className="text-blue-600 hover:text-blue-800">política de privacidade</a>
+                                <label
+                                    htmlFor="acceptTerms"
+                                    className="ml-2 text-sm text-gray-500"
+                                >
+                                    Li e concordo com os{" "}
+                                    <a href="#" className="text-blue-600 hover:text-blue-800">
+                                        Termos e condições
+                                    </a>{" "}
+                                    e{" "}
+                                    <a href="#" className="text-blue-600 hover:text-blue-800">
+                                        política de privacidade
+                                    </a>
                                 </label>
                             </div>
 
                             <div className="text-center mb-[24px]">
-                                <button type="submit" className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px] cursor-pointer transition transform active:scale-95 duration-100">
+                                <button
+                                    type="submit"
+                                    className="bg-[#007AFF] text-white w-full h-[40px] rounded-[6px] cursor-pointer transition transform active:scale-95 duration-100"
+                                >
                                     Criar conta
                                 </button>
                             </div>
                         </form>
 
                         <hr className="h-[1px] text-[#E5E5E5] w-full" />
-                        <span className="flex justify-center text-sm text-gray-500 mt-[5px]">ou</span>
+                        <span className="flex justify-center text-sm text-gray-500 mt-[5px]">
+                            ou
+                        </span>
                         <Link href="/login">
-                            <span className="text-blue-600 hover:text-blue-800 text-sm flex justify-center mt-[10px]"> Faça login em sua conta</span>
+                            <span className="text-blue-600 hover:text-blue-800 text-sm flex justify-center mt-[10px]">
+                                Faça login em sua conta
+                            </span>
                         </Link>
                     </div>
                     <div className="mt-[65px]">
