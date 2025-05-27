@@ -36,19 +36,16 @@ export default function Register() {
         setError("");
         setSuccess("");
 
-        // Validação: Verificar se as senhas coincidem
         if (formData.password !== formData.confirmPassword) {
             setError("As senhas não coincidem");
             return;
         }
 
-        // Validação: Verificar se os termos foram aceitos
         if (!formData.acceptTerms) {
             setError("Você deve aceitar os termos e condições");
             return;
         }
 
-        // Dados a serem enviados
         const userData = {
             name: formData.fullName,
             email: formData.email,
@@ -66,11 +63,19 @@ export default function Register() {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || "Erro ao criar conta");
+                const text = await response.text(); // Obter o texto bruto
+                let errorMessage = "Erro ao criar conta";
+                try {
+                    const errorData = JSON.parse(text);
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    errorMessage = "Resposta inválida do servidor";
+                }
+                throw new Error(errorMessage);
             }
 
-            // Sucesso: Exibir mensagem e redirecionar após 2 segundos
+            const data = await response.json();
+            console.log(data)
             setSuccess("Usuário criado com sucesso!");
             setTimeout(() => {
                 router.push("/");
@@ -92,13 +97,11 @@ export default function Register() {
         <div className="min-h-screen flex flex-col">
             <div className="flex flex-1">
                 <LoginImage />
-
                 <div className="w-[33.75rem] mx-auto m-[100px] mb-[0px]">
                     <div className="w-[22.5rem] mx-auto">
                         <h2 className="text-2xl font-semibold mb-[24px] text-center">
                             Criar uma conta
                         </h2>
-
                         {success && (
                             <div className="flex items-center justify-center bg-green-100 text-green-800 text-base font-semibold p-4 mb-4 rounded-lg shadow-md animate-fade-in">
                                 <FaCheckCircle className="mr-2 text-green-600" size={20} />
@@ -106,13 +109,9 @@ export default function Register() {
                             </div>
                         )}
                         {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
-
                         <form onSubmit={handleSubmit}>
                             <div>
-                                <label
-                                    htmlFor="fullName"
-                                    className="block text-sm pl-[16px] pb-[8px]"
-                                >
+                                <label htmlFor="fullName" className="block text-sm pl-[16px] pb-[8px]">
                                     Nome completo
                                 </label>
                                 <input
@@ -126,12 +125,8 @@ export default function Register() {
                                     required
                                 />
                             </div>
-
                             <div>
-                                <label
-                                    htmlFor="email"
-                                    className="block text-sm pl-[16px] pb-[8px]"
-                                >
+                                <label htmlFor="email" className="block text-sm pl-[16px] pb-[8px]">
                                     Email
                                 </label>
                                 <input
@@ -145,12 +140,8 @@ export default function Register() {
                                     required
                                 />
                             </div>
-
                             <div>
-                                <label
-                                    htmlFor="phone"
-                                    className="block text-sm pl-[16px] pb-[8px]"
-                                >
+                                <label htmlFor="phone" className="block text-sm pl-[16px] pb-[8px]">
                                     Telefone
                                 </label>
                                 <input
@@ -164,12 +155,8 @@ export default function Register() {
                                     required
                                 />
                             </div>
-
                             <div className="relative">
-                                <label
-                                    htmlFor="password"
-                                    className="block text-sm pl-[16px] pb-[8px]"
-                                >
+                                <label htmlFor="password" className="block text-sm pl-[16px] pb-[8px]">
                                     Senha
                                 </label>
                                 <div className="relative mb-[20px]">
@@ -188,20 +175,12 @@ export default function Register() {
                                         onClick={() => setShowPassword(!showPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
-                                        {showPassword ? (
-                                            <IoMdEye size={20} />
-                                        ) : (
-                                            <IoMdEyeOff size={20} />
-                                        )}
+                                        {showPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
                                     </button>
                                 </div>
                             </div>
-
                             <div className="relative">
-                                <label
-                                    htmlFor="confirmPassword"
-                                    className="block text-sm pl-[16px] pb-[8px]"
-                                >
+                                <label htmlFor="confirmPassword" className="block text-sm pl-[16px] pb-[8px]">
                                     Confirme sua senha
                                 </label>
                                 <div className="relative mb-[20px]">
@@ -220,15 +199,10 @@ export default function Register() {
                                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                                     >
-                                        {showConfirmPassword ? (
-                                            <IoMdEye size={20} />
-                                        ) : (
-                                            <IoMdEyeOff size={20} />
-                                        )}
+                                        {showConfirmPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
                                     </button>
                                 </div>
                             </div>
-
                             <div className="flex items-start mb-4">
                                 <input
                                     type="checkbox"
@@ -238,10 +212,7 @@ export default function Register() {
                                     checked={formData.acceptTerms}
                                     onChange={handleInputChange}
                                 />
-                                <label
-                                    htmlFor="acceptTerms"
-                                    className="ml-2 text-sm text-gray-500"
-                                >
+                                <label htmlFor="acceptTerms" className="ml-2 text-sm text-gray-500">
                                     Li e concordo com os{" "}
                                     <a href="#" className="text-blue-600 hover:text-blue-800">
                                         Termos e condições
@@ -252,7 +223,6 @@ export default function Register() {
                                     </a>
                                 </label>
                             </div>
-
                             <div className="text-center mb-[24px]">
                                 <button
                                     type="submit"
@@ -262,7 +232,6 @@ export default function Register() {
                                 </button>
                             </div>
                         </form>
-
                         <hr className="h-[1px] text-[#E5E5E5] w-full" />
                         <span className="flex justify-center text-sm text-gray-500 mt-[5px]">
                             ou
