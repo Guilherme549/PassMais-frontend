@@ -14,5 +14,5 @@ services:
       - passmais-networkk
 
 networks:
-  passmais-networkk:
+  passmais-network:
     external: true
