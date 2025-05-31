@@ -10,7 +10,7 @@ env:
   ECS_SERVICE: passmais-front-task-service-h2j663g3
   ECS_CLUSTER: passmais-frontend-cluster
   ECS_TASK_DEFINITION: .aws/task-definition.json
-  CONTAINER_NAME_API: passmais-container
+  CONTAINER_NAME_API: frontend-container
 
 permissions:
   contents: read
