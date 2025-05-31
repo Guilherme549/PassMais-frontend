@@ -2,7 +2,7 @@ name: Deploy to ECS Fargate
 
 on: 
   push:
-      branches: ["main"]
+    branches: ["main"]
 
 env:
   AWS_REGION: us-east-1
@@ -42,9 +42,9 @@ jobs:
           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
           IMAGE_TAG: frontend-container
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f ./pass-mais/Dockerfile
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f ./PassMais-frontend/pass-mais/Dockerfile ./PassMais-frontend/pass-mais
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
       - name: Fill in the new image ID in the ECS task definition
         id: task-def
