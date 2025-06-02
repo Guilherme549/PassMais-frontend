@@ -21,6 +21,7 @@ export default function LoginForm() {
             redirect: false,
             email,
             password,
+            callbackUrl: "/medical-appointments", // Define o redirecionamento após login
         });
 
         if (result?.error) {
@@ -28,8 +29,8 @@ export default function LoginForm() {
         } else {
             setSuccess("Login realizado com sucesso!");
             setTimeout(() => {
-                window.location.href = "/dashboard"; // Redirecionar para uma página após login
-            }, 2000);
+                window.location.href = "/medical-appointments"; // Redirecionamento manual como fallback
+            }, 1000);
         }
     };
 
