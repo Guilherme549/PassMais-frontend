@@ -3,8 +3,16 @@
 import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
+import { FaBars, FaTimes } from "react-icons/fa"; // Ícones para o menu hambúrguer
 
 export default function Home() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // Estado para controlar o menu
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
   return (
     <>
       {/* Metadados */}
@@ -21,29 +29,67 @@ export default function Home() {
           <nav className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             {/* Logo */}
             <div className="text-2xl font-bold text-[#5179EF]">Pass+</div>
+
+            {/* Botão do menu hambúrguer (visível apenas em telas pequenas) */}
+            <button
+              className="md:hidden text-gray-600 focus:outline-none"
+              onClick={toggleMenu}
+              aria-label="Toggle menu"
+            >
+              {isMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
+            </button>
+
             {/* Menu de Navegação */}
-            <div className="flex items-center space-x-6">
-              <Link href="#inicio" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+            <div
+              className={`${isMenuOpen ? "flex" : "hidden"
+                } md:flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-6 absolute md:static top-16 left-0 w-full md:w-auto bg-white md:bg-transparent p-4 md:p-0 shadow-md md:shadow-none z-40 transition-all duration-300 ease-in-out`}
+            >
+              <Link
+                href="#inicio"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)} // Fecha o menu ao clicar no link
+              >
                 Início
               </Link>
-              <Link href="#funcionalidades" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+              <Link
+                href="#funcionalidades"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Funcionalidades
               </Link>
-              <Link href="#como-funciona" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+              <Link
+                href="#como-funciona"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Como Funciona
               </Link>
-              <Link href="#para-pacientes" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+              <Link
+                href="#para-pacientes"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Para Pacientes
               </Link>
-              <Link href="/medicos" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+              <Link
+                href="/medicos"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Para Médicos
               </Link>
-              <Link href="/login" className="text-gray-600 hover:text-[#5179EF] transition-colors">
+              <Link
+                href="/login"
+                className="text-gray-600 hover:text-[#5179EF] transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Entrar
               </Link>
               <Link
                 href="/register"
                 className="bg-[#5179EF] text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all"
+                onClick={() => setIsMenuOpen(false)}
               >
                 Cadastrar-se
               </Link>
@@ -72,10 +118,10 @@ export default function Home() {
             {/* Imagem */}
             <div className="flex-1">
               <Image
-                src="/peopleUsingTheSite..png" // Certifique-se de que a imagem está na pasta public
+                src="/peopleUsingTheSite..png"
                 alt="Pessoa usando o app no celular"
-                width={500} // Ajuste conforme o tamanho real da imagem
-                height={500} // Ajuste conforme o tamanho real da imagem
+                width={500}
+                height={500}
                 className="w-full max-w-md mx-auto rounded-4xl"
               />
             </div>
@@ -112,25 +158,21 @@ export default function Home() {
           <div className="max-w-6xl mx-auto px-4">
             <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Funcionalidades Principais</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {/* Card 1 */}
               <div className="bg-white p-6 rounded-2xl shadow-lg text-center">
                 <div className="text-4xl mb-4">📅</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Agendamento Online</h3>
                 <p className="text-gray-600">Marque consultas médicas de forma rápida.</p>
               </div>
-              {/* Card 2 */}
               <div className="bg-white p-6 rounded-2xl shadow-lg text-center">
                 <div className="text-4xl mb-4">🏥</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Gestão de Consultas</h3>
                 <p className="text-gray-600">Visualize, reagende ou cancele com facilidade.</p>
               </div>
-              {/* Card 3 */}
               <div className="bg-white p-6 rounded-2xl shadow-lg text-center">
                 <div className="text-4xl mb-4">👨‍⚕️</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Perfis Médicos Detalhados</h3>
                 <p className="text-gray-600">Veja especializações e avaliações.</p>
               </div>
-              {/* Card 4 */}
               <div className="bg-white p-6 rounded-2xl shadow-lg text-center">
                 <div className="text-4xl mb-4">🔔</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Lembretes Automatizados</h3>
@@ -174,7 +216,6 @@ export default function Home() {
           <div className="max-w-6xl mx-auto px-4">
             <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Benefícios</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-              {/* Para Pacientes */}
               <div className="bg-white p-8 rounded-2xl shadow-lg">
                 <h3 className="text-2xl font-semibold text-gray-900 mb-4">Para Pacientes</h3>
                 <ul className="space-y-3 text-gray-600">
@@ -183,7 +224,6 @@ export default function Home() {
                   <li>✔ Histórico de consultas</li>
                 </ul>
               </div>
-              {/* Para Clínicas */}
               <div className="bg-white p-8 rounded-2xl shadow-lg">
                 <h3 className="text-2xl font-semibold text-gray-900 mb-4">Para Clínicas</h3>
                 <ul className="space-y-3 text-gray-600">
@@ -247,7 +287,6 @@ export default function Home() {
         <footer className="bg-gray-900 text-white py-8">
           <div className="max-w-6xl mx-auto px-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Links */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">Links Úteis</h3>
                 <ul className="space-y-2">
@@ -278,7 +317,6 @@ export default function Home() {
                   </li>
                 </ul>
               </div>
-              {/* Redes Sociais */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">Siga-nos</h3>
                 <div className="flex space-x-4">
@@ -293,7 +331,6 @@ export default function Home() {
                   </Link>
                 </div>
               </div>
-              {/* Logo */}
               <div className="text-center md:text-right">
                 <div className="text-2xl font-bold text-[#5179EF] mb-4">Pass+</div>
                 <p className="text-gray-400">© 2025 Pass+. Todos os direitos reservados.</p>
