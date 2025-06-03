@@ -1,5 +1,7 @@
 # Pass+
 
+O Pass+ é um software desenvolvido com o objetivo de facilitar o agendamento e gerenciamento de consultas médicas. Ele oferece uma solução prática e eficiente tanto para os pacientes, que podem marcar, remarcar ou cancelar consultas de forma simples, quanto para os profissionais de saúde e clínicas, que conseguem organizar melhor sua agenda e o fluxo de atendimentos.
+
 ## Premissas
  - Ter o node.js instalado na maquina.
  - Ter o Docker intalado na maquina.
