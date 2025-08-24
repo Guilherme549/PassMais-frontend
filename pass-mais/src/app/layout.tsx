@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/apple-touch-icon.png" }],
     shortcut: ["/icon-passmais.ico"],
   },
-  manifest: "/site.webmanifest",
+  
   // themeColor: "#0B5FFF", // opcional
 };
 
