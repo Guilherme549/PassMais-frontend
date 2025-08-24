@@ -106,7 +106,6 @@ export default function ClientMedicalAppointments({
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[] | null>(doctors);
 
   useEffect(() => {
-    console.log("Doctors recebidos em ClientMedicalAppointments:", doctors);
     setLoadedDoctors(doctors);
     setFilteredDoctors(doctors); // Inicializa os médicos filtrados com todos os médicos
   }, [doctors]);

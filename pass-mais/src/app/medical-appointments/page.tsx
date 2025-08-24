@@ -49,7 +49,7 @@ export default async function MedicalAppointments() {
         },
     ];
 
-    console.log("Doctors sendo passados:", doctors);
+
 
     return <ClientMedicalAppointments doctors={doctors} />;
 }

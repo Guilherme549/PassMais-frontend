@@ -40,7 +40,6 @@ export default async function MedicalAppointments() {
         },
     ];
 
-    console.log("Doctors being passed to ClientMedicalAppointments:", doctors);
 
     return <ClientMedicalAppointments doctors={doctors} />;
 }
