@@ -20,7 +20,7 @@ jobs:
           cd ~/PassMais-frontend/pass-mais
           git pull
           sudo docker ps --filter "publish=3000" -q | xargs -r sudo docker rm -f
-          sudo docker compose up --pull always --build -d
+          sudo docker compose up -d --build
 
     - name: Marcar deploy OK no GitHub
       run: echo "🚀 Deploy finalizado com sucesso!!"
