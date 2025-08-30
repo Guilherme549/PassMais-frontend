@@ -19,6 +19,7 @@ jobs:
         script: |
           cd ~/PassMais-frontend/pass-mais
           git pull
+          sudo docker system prune --all --volumes --force
           sudo docker ps --filter "publish=3000" -q | xargs -r sudo docker rm -f
           sudo docker compose up -d --build
 
