@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Footer from "../../components/Footer";
 import NavBarDashboardMedico from "../../components/NavBarDashboardMedico";
 import AvaliacoesFeedback from "../avaliacoes-feedback";
 import GerenciarAgendamentos from "../gerenciar-agendamentos";
@@ -95,8 +94,7 @@ export default function MedicoDashboardSection() {
                     {activeSection === "notificacoes" && <Notificacoes notifications={mockNotifications} />}
                     {activeSection === "avaliacoes-feedback" && <AvaliacoesFeedback reviews={mockReviews} />}
                 </div>
-
-                <Footer />
+                
             </div>
         </div>
     );

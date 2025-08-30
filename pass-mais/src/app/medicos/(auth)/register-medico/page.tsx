@@ -1,6 +1,5 @@
 "use client";
 
-import Footer from "@/components/Footer";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
@@ -368,9 +367,7 @@ export default function Register() {
             </form>
           </div>
 
-          <div className="mt-10">
-            <Footer />
-          </div>
+          
         </div>
       </div>
     </div>

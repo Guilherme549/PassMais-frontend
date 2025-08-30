@@ -1,6 +1,5 @@
 import Link from "next/link";
 import LoginImage from "../components/LoginImage";
-import Footer from "@/components/Footer";
 
 export default function resetPassword() {
     return (
@@ -34,9 +33,7 @@ export default function resetPassword() {
                         </div>
                     </form>
                 </div>
-                <div className="mt-[350px]">
-                    <Footer />
-                </div>
+                
             </div>
         </div>
     )

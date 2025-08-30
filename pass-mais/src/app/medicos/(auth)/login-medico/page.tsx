@@ -1,7 +1,6 @@
 "use client";
 
 import LoginImage from "@/app/(auth)/components/LoginImage";
-import Footer from "@/components/Footer";
 import Link from "next/link";
 import { useState } from "react";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
@@ -54,7 +53,7 @@ export default function LoginMedico() {
       setLoading(true);
       // TODO: substituir por chamada à API real
       await new Promise((r) => setTimeout(r, 800));
-      router.push("/medico/dashboard");
+      router.push("/medicos/dashboard/visao-geral");
     } catch {
       setError("Falha ao entrar. Tente novamente.");
     } finally {
@@ -171,9 +170,7 @@ export default function LoginMedico() {
             </form>
           </div>
 
-          <div className="mt-10">
-            <Footer />
-          </div>
+          
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import LoginImage from "@/app/(auth)/components/LoginImage";
-import Footer from "@/components/Footer";
 import Link from "next/link";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -106,9 +105,7 @@ export default function EsqueceuSenhaMedico() {
             </form>
           </div>
 
-          <div className="mt-10">
-            <Footer />
-          </div>
+          
         </div>
       </div>
     </div>

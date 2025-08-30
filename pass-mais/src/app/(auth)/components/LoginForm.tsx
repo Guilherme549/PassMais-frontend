@@ -92,6 +92,11 @@ export default function LoginForm() {
             {showPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
           </button>
         </div>
+        <div className="flex justify-end -mt-3 mb-4 pr-1">
+          <a href="/reset-password" className="text-sm text-[#007AFF] hover:text-blue-700">
+            Esqueceu a senha?
+          </a>
+        </div>
       </div>
       <div className="text-center mb-[24px]">
         <button
