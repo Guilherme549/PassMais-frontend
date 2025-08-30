@@ -15,4 +15,4 @@ services:
 
 networks:
   passmais-network:
-    external: true
+    driver: bridge
