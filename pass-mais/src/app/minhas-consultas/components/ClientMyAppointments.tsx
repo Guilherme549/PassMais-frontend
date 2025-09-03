@@ -45,7 +45,7 @@ export default function ClientMyAppointments({
 
     const defaultTimes = useMemo(() => ["09:00", "10:30", "14:00", "16:00"], []);
 
-    const computeSlots = (doctor: string): SlotDay[] => {
+    const computeSlots = (): SlotDay[] => {
         // Simula agenda do médico: próximos 7 dias com horários padrão
         const days: SlotDay[] = [];
         for (let i = 1; i <= 7; i++) {
@@ -113,7 +113,7 @@ export default function ClientMyAppointments({
                                         <button
                                             onClick={() => {
                                                 setRescheduleId(appointment.id);
-                                                setRescheduleSlots(computeSlots(appointment.doctor));
+                                                setRescheduleSlots(computeSlots());
                                             }}
                                             className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
                                         >
