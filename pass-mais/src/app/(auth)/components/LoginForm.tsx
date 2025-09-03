@@ -1,6 +1,5 @@
-'use client';
+"use client";
 
-import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { FaCheckCircle } from "react-icons/fa";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
@@ -19,31 +18,38 @@ export default function LoginForm() {
     setError("");
     setSuccess("");
 
-    const result = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (result?.error) {
-      setError("Credenciais inválidas. Tente novamente.");
-    } else {
-      // Busca a sessão para verificar a role
-      const response = await fetch('/api/auth/session');
-      if (response.ok) {
-        const session = await response.json();
-        console.log('Sessão após login:', session); // Depuração
-        if (session?.user?.role === 'admin') {
-          setSuccess("Login realizado com sucesso! Redirecionando para o painel admin...");
-          setTimeout(() => router.push('/admin/painel'), 1000);
-        } else {
-          setSuccess("Login realizado com sucesso! Redirecionando...");
-          setTimeout(() => router.push('/medical-appointments'), 1000);
-        }
-      } else {
-        setError("Erro ao verificar a sessão. Tente novamente.");
-        console.log('Erro na sessão:', response.status); // Depuração
+      if (!res.ok) {
+        const text = await res.text();
+        let message = 'Falha no login. Verifique suas credenciais.';
+        try {
+          const data = JSON.parse(text);
+          message = data.message || message;
+        } catch {}
+        throw new Error(message);
       }
+
+      const data = await res.json();
+      const { accessToken, refreshToken } = data || {};
+
+      if (!accessToken || !refreshToken) {
+        throw new Error('Resposta inválida do servidor.');
+      }
+
+      // Armazena tokens (ajuste se preferir cookies httpOnly via rota API)
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      setSuccess('Login realizado com sucesso! Redirecionando...');
+      setTimeout(() => router.push('/medical-appointments'), 800);
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao efetuar login.');
     }
   };
 
@@ -67,6 +73,7 @@ export default function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
           placeholder="Insira o seu email"
+          autoComplete="email"
           required
         />
       </div>
@@ -82,6 +89,7 @@ export default function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
             placeholder="Digite sua senha"
+            autoComplete="current-password"
             required
           />
           <button

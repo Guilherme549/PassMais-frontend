@@ -49,12 +49,15 @@ export default function Register() {
         const userData = {
             name: formData.fullName,
             email: formData.email,
-            phone: formData.phone,
             password: formData.password,
+            role: "PATIENT",
+            lgpdAccepted: formData.acceptTerms === true,
+            phone: formData.phone,
         };
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {
+            // Usa rota da própria aplicação para evitar CORS
+            const response = await fetch(`/api/auth/register`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -122,6 +125,7 @@ export default function Register() {
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Digite seu nome completo"
+                                    autoComplete="name"
                                     required
                                 />
                             </div>
@@ -137,6 +141,7 @@ export default function Register() {
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Insira o seu email"
+                                    autoComplete="email"
                                     required
                                 />
                             </div>
@@ -147,11 +152,12 @@ export default function Register() {
                                 <input
                                     id="phone"
                                     name="phone"
-                                    type="text"
+                                    type="tel"
                                     value={formData.phone}
                                     onChange={handleInputChange}
                                     className="outline-none w-full h-[48px] bg-[#E5E5E5] mb-[16px] rounded-[6px] pl-[16px] focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20"
                                     placeholder="Digite o seu número de telefone"
+                                    autoComplete="tel"
                                     required
                                 />
                             </div>
@@ -168,6 +174,7 @@ export default function Register() {
                                         onChange={handleInputChange}
                                         className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
                                         placeholder="Crie sua senha"
+                                        autoComplete="new-password"
                                         required
                                     />
                                     <button
@@ -192,6 +199,7 @@ export default function Register() {
                                         onChange={handleInputChange}
                                         className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 outline-none transition-colors duration-200 bg-[#E5E5E5]"
                                         placeholder="Confirme sua senha"
+                                        autoComplete="new-password"
                                         required
                                     />
                                     <button

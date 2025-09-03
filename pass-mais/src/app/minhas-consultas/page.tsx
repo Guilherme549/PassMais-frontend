@@ -9,7 +9,7 @@ interface Appointment {
     doctor: string;
     address: string;
     value: number; // Em reais
-    status: "agendada" | "realizada"; // Status da consulta
+    status: "agendada" | "realizada" | "cancelada"; // Status da consulta
 }
 
 export default async function MyAppointments() {
@@ -46,6 +46,15 @@ export default async function MyAppointments() {
             address: "Rua 10, 500 - Setor Oeste, Goiânia - GO, 74120-020",
             value: 200.00,
             status: "realizada",
+        },
+        {
+            id: 4,
+            date: "15/05/2025",
+            time: "16:00",
+            doctor: "Dr. Carlos Pereira",
+            address: "Rua das Flores, 123 - Centro, Anápolis - GO, 75000-000",
+            value: 220.00,
+            status: "cancelada",
         },
     ];
 
