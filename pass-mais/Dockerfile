@@ -1,5 +1,4 @@
-FROM node:iron-trixie-slim
-
+FROM node:lts-alpine3.22
 # Define o diretório de trabalho
 WORKDIR /app
 
