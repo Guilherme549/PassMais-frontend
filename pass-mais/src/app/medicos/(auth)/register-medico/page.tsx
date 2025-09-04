@@ -21,6 +21,7 @@ type FormDataState = {
   password: string;
   confirmPassword: string;
   photo: File | null;
+  acceptTerms: boolean;
 };
 
 export default function Register() {
@@ -43,13 +44,20 @@ export default function Register() {
     password: "",
     confirmPassword: "",
     photo: null,
+    acceptTerms: false,
   });
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    const name = (target as any).name as keyof FormDataState;
+    const isCheckbox =
+      (target as any).type && (target as any).type === "checkbox";
+    const value = isCheckbox
+      ? (target as HTMLInputElement).checked
+      : target.value;
+    setFormData((prev) => ({ ...prev, [name]: value } as FormDataState));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,6 +77,11 @@ export default function Register() {
 
     if (formData.password !== formData.confirmPassword) {
       setError("As senhas não coincidem");
+      return;
+    }
+
+    if (!formData.acceptTerms) {
+      setError("Você deve aceitar os termos e condições");
       return;
     }
 
@@ -336,7 +349,28 @@ export default function Register() {
               </div>
 
               {/* Ações */}
-              <div className="pt-2">
+              <div className="pt-2 space-y-4">
+                <div className="flex items-start">
+                  <input
+                    type="checkbox"
+                    id="acceptTerms"
+                    name="acceptTerms"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={formData.acceptTerms}
+                    onChange={handleInputChange}
+                  />
+                  <label htmlFor="acceptTerms" className="ml-2 text-sm text-gray-500">
+                    Li e concordo com os
+                    {" "}
+                    <Link href="/termos" className="text-blue-600 hover:text-blue-800">
+                      Termos e condições
+                    </Link>
+                    {" "}e {" "}
+                    <Link href="/privacidade" className="text-blue-600 hover:text-blue-800">
+                      política de privacidade
+                    </Link>
+                  </label>
+                </div>
                 <button
                   type="submit"
                   className="bg-[#5179EF] text-white w-full h-[40px] rounded-[6px] cursor-pointer transition transform active:scale-95 duration-100"
