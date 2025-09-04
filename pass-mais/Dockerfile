@@ -1,4 +1,4 @@
-FROM node:18
+FROM node:iron-trixie-slim
 
 # Define o diretório de trabalho
 WORKDIR /app
