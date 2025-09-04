@@ -27,13 +27,6 @@ export const authOptions: AuthOptions = {
 
         const users: UserWithRole[] = [
           {
-            id: "1",
-            name: "Guilherme",
-            email: "guilhermevs54@gmail.com",
-            password: "123456",
-            role: "user",
-          },
-          {
             id: "2",
             name: "Admin User",
             email: "admin@example.com",
