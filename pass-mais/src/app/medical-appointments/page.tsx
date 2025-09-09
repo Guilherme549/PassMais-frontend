@@ -1,5 +1,7 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ClientMedicalAppointments from "./components/ClientMedicalAppointments";
 
 interface Doctor {
@@ -12,12 +14,22 @@ interface Doctor {
     address: string;
 }
 
-export default async function MedicalAppointments() {
-    const session = await getServerSession();
+export default function MedicalAppointments() {
+    const router = useRouter();
+    const [ready, setReady] = useState(false);
 
-    if (!session) {
-        redirect("/");
-    }
+    useEffect(() => {
+        try {
+            const token = localStorage.getItem("accessToken");
+            if (!token) {
+                router.replace("/login");
+            } else {
+                setReady(true);
+            }
+        } catch {
+            router.replace("/login");
+        }
+    }, [router]);
 
     const doctors: Doctor[] = [
         {
@@ -49,7 +61,6 @@ export default async function MedicalAppointments() {
         },
     ];
 
-
-
+    if (!ready) return null;
     return <ClientMedicalAppointments doctors={doctors} />;
 }

@@ -45,6 +45,15 @@ export default function MedicoDashboardSection() {
     const pathname = usePathname();
     const [activeSection, setActiveSection] = useState("visao-geral");
 
+    // Bloqueia acesso sem accessToken
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+            router.push('/medicos/login-medico');
+        }
+    }, [router]);
+
     useEffect(() => {
         const section = pathname.split("/").pop() || "visao-geral";
         setActiveSection(section);

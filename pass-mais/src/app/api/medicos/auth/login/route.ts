@@ -1,27 +1,29 @@
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const apiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
-    const url = `${apiBase.replace(/\/$/, "")}/api/auth/register`;
 
-    const upstream = await fetch(url, {
+    const upstream = await fetch("http://localhost:8080/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    const contentType = upstream.headers.get("content-type") || "application/json";
+    const ct = upstream.headers.get("content-type") || "";
     const text = await upstream.text();
-    const isJson = contentType.includes("application/json");
 
+    console.log("[proxy] /api/medicos/auth/login =>", upstream.status, ct, text);
+
+    const isJson = ct.includes("application/json");
     return new Response(text, {
       status: upstream.status,
-      headers: { "content-type": isJson ? "application/json" : contentType },
+      headers: { "content-type": isJson ? "application/json" : ct || "text/plain; charset=utf-8" },
     });
   } catch (err) {
+    console.error("[proxy] /api/medicos/auth/login error:", err);
     return new Response(
       JSON.stringify({ message: "Proxy error", error: (err as Error).message }),
       { status: 500, headers: { "content-type": "application/json" } }
     );
   }
 }
+

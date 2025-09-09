@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FaCheckCircle } from "react-icons/fa";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import { useRouter } from 'next/navigation';
+import { jsonPost, setTokens } from '@/lib/api';
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -19,35 +20,43 @@ export default function LoginForm() {
     setSuccess("");
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      type LoginResponse = { accessToken: string; fullName?: string; role?: string };
+      const data = await jsonPost<LoginResponse>('/api/auth/login', { email, password });
+      const accessToken = data?.accessToken;
+      const roleRaw = data?.role ?? '';
+      const role = typeof roleRaw === 'string' ? roleRaw.toUpperCase() : '';
 
-      if (!res.ok) {
-        const text = await res.text();
-        let message = 'Falha no login. Verifique suas credenciais.';
-        try {
-          const data = JSON.parse(text);
-          message = data.message || message;
-        } catch {}
-        throw new Error(message);
-      }
-
-      const data = await res.json();
-      const { accessToken, refreshToken } = data || {};
-
-      if (!accessToken || !refreshToken) {
+      if (!accessToken) {
         throw new Error('Resposta inválida do servidor.');
       }
 
-      // Armazena tokens (ajuste se preferir cookies httpOnly via rota API)
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      // Armazena somente o accessToken (refresh via /api/auth/refresh)
+      setTokens({ accessToken });
+      if (role) {
+        localStorage.setItem('role', role);
+        // Disponibiliza a role para páginas server-side via cookie
+        try { document.cookie = `role=${encodeURIComponent(role)}; path=/`; } catch {}
+      }
+      if (data?.fullName) localStorage.setItem('fullName', data.fullName);
+
+      // Regra de redirecionamento por role
+      if (role === 'DOCTOR') {
+        // Não permite login para médicos no frontend atual
+        setError('Login ou senha inválidos.');
+        return;
+      }
 
       setSuccess('Login realizado com sucesso! Redirecionando...');
-      setTimeout(() => router.push('/medical-appointments'), 800);
+      setTimeout(() => {
+        if (role === 'ADMINISTRATOR') {
+          router.push('/admin/painel');
+        } else if (role === 'PATIENT') {
+          router.push('/medical-appointments');
+        } else {
+          // Fallback seguro para pacientes
+          router.push('/medical-appointments');
+        }
+      }, 100);
     } catch (err: any) {
       setError(err?.message || 'Erro ao efetuar login.');
     }

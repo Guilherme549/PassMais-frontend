@@ -2,27 +2,34 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const upstream = await fetch("https://api.passmais.com.br/api/auth/login", {
+    const apiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+    const url = `${apiBase.replace(/\/$/, "")}/api/auth/login`;
+
+    const upstream = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
     const contentType = upstream.headers.get("content-type") || "application/json";
-    const data = contentType.includes("application/json") ? await upstream.json().catch(() => ({})) : await upstream.text();
+    const text = await upstream.text();
+    const isJson = contentType.includes("application/json");
 
-    return new Response(
-      contentType.includes("application/json") ? JSON.stringify(data) : (data as string),
-      {
-        status: upstream.status,
-        headers: { "content-type": contentType },
-      }
-    );
+    // Helpful server-side log for debugging
+    console.log(`[proxy] POST /api/auth/login -> ${url} :: ${upstream.status}`);
+    if (!upstream.ok) {
+      console.warn(`[proxy] upstream non-OK: ${upstream.status} body=`, text);
+    }
+
+    return new Response(text, {
+      status: upstream.status,
+      headers: { "content-type": isJson ? "application/json" : contentType },
+    });
   } catch (err) {
+    console.error("[proxy] /api/auth/login error:", err);
     return new Response(
       JSON.stringify({ message: "Proxy error", error: (err as Error).message }),
       { status: 500, headers: { "content-type": "application/json" } }
     );
   }
 }
-

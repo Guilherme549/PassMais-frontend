@@ -31,7 +31,7 @@ export const authOptions: AuthOptions = {
             name: "Admin User",
             email: "admin@example.com",
             password: "admin123",
-            role: "admin",
+            role: "administrator",
           },
         ];
 

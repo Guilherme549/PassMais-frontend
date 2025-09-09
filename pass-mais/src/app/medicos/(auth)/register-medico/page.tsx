@@ -2,10 +2,37 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UploadCloud } from "lucide-react";
+
+const SPECIALTIES = [
+  "Clínica Geral",
+  "Cardiologia",
+  "Pediatria",
+  "Dermatologia",
+  "Ginecologia",
+  "Obstetrícia",
+  "Ortopedia",
+  "Neurologia",
+  "Psiquiatria",
+  "Endocrinologia",
+  "Gastroenterologia",
+  "Nefrologia",
+  "Pneumologia",
+  "Oncologia",
+  "Reumatologia",
+  "Oftalmologia",
+  "Otorrinolaringologia",
+  "Urologia",
+  "Anestesiologia",
+  "Hematologia",
+  "Infectologia",
+  "Nutrologia",
+  "Medicina de Família e Comunidade",
+];
 
 type FormDataState = {
   firstName: string;
@@ -17,10 +44,11 @@ type FormDataState = {
   month: string;
   year: string;
   crm: string;
+  specialty: string;
   about: string;
   password: string;
   confirmPassword: string;
-  photo: File | null;
+  photo: File;
   acceptTerms: boolean;
 };
 
@@ -28,7 +56,9 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<string[]>([]);
+  const [success, setSuccess] = useState("");
+  const router = useRouter();
 
   const [formData, setFormData] = useState<FormDataState>({
     firstName: "",
@@ -40,6 +70,7 @@ export default function Register() {
     month: "",
     year: "",
     crm: "",
+    specialty: "",
     about: "",
     password: "",
     confirmPassword: "",
@@ -71,28 +102,146 @@ export default function Register() {
     setFormData((prev) => ({ ...prev, photo: file }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrors([]);
+    setSuccess("");
 
+    const clientErrors: string[] = [];
+    // Basic client-side validations to avoid backend 400
+    const sanitizeDigits = (v: string) => v.replace(/\D+/g, "");
+    const emailOk = /.+@.+\..+/.test(formData.email);
+    if (!emailOk) clientErrors.push("Informe um e-mail válido");
+    const phoneDigits = sanitizeDigits(formData.phone);
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) clientErrors.push("Telefone inválido");
+    const cpfDigits = sanitizeDigits(formData.cpf);
+    if (cpfDigits.length !== 11) clientErrors.push("CPF inválido");
+    const dayNum = Number(formData.day);
+    const monthNum = Number(formData.month);
+    const yearNum = Number(formData.year);
+    const now = new Date();
+    const minYear = 1900;
+    const maxYear = now.getFullYear();
+    let birthDateValid = true;
+    if (
+      !Number.isFinite(dayNum) ||
+      !Number.isFinite(monthNum) ||
+      !Number.isFinite(yearNum) ||
+      dayNum < 1 || dayNum > 31 ||
+      monthNum < 1 || monthNum > 12 ||
+      yearNum < minYear || yearNum > maxYear
+    ) {
+      birthDateValid = false;
+    } else {
+      const testDate = new Date(yearNum, monthNum - 1, dayNum);
+      if (
+        testDate.getFullYear() !== yearNum ||
+        testDate.getMonth() !== monthNum - 1 ||
+        testDate.getDate() !== dayNum
+      ) {
+        birthDateValid = false;
+      }
+    }
+    if (!birthDateValid) clientErrors.push("Data de nascimento inválida");
     if (formData.password !== formData.confirmPassword) {
-      setError("As senhas não coincidem");
-      return;
+      clientErrors.push("As senhas não coincidem");
     }
-
     if (!formData.acceptTerms) {
-      setError("Você deve aceitar os termos e condições");
+      clientErrors.push("Você deve aceitar os termos e condições");
+    }
+    if (clientErrors.length) {
+      setErrors(clientErrors);
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
       return;
     }
 
-    const payload = {
-      ...formData,
-      fullName: `${formData.firstName} ${formData.lastName}`.trim(),
-      photoName: formData.photo?.name || null,
+    const birthDate = `${String(formData.year).padStart(4, "0")}-${String(
+      formData.month
+    ).padStart(2, "0")}-${String(formData.day).padStart(2, "0")}`;
+    const phone = phoneDigits;
+    const cpf = cpfDigits;
+
+    const doctorData = {
+      name: `${formData.firstName} ${formData.lastName}`.trim(),
+      email: formData.email,
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      lgpdAccepted: formData.acceptTerms === true,
+      crm: formData.crm,
+      phone,
+      cpf,
+      birthDate,
+      bio: formData.about,
+      specialty: formData.specialty,
+      consultationPrice: 1,
+      photoUrl: "",
     };
 
-    console.log("Form submitted:", payload);
-    // Adicione aqui a chamada de API para enviar os dados
+    try {
+      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+      const response = await fetch(`${apiBase}/api/registration/doctor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(doctorData),
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        const collected: string[] = [`Erro ao enviar cadastro (HTTP ${response.status})`];
+        if (contentType.includes("application/json")) {
+          try {
+            const data = await response.json();
+            if (data?.message) collected.push(String(data.message));
+            if (data?.error) collected.push(String(data.error));
+            if (Array.isArray(data?.errors)) {
+              for (const e of data.errors) {
+                if (!e) continue;
+                const item = e.message || e.field || JSON.stringify(e);
+                if (item) collected.push(String(item));
+              }
+            }
+            if (Array.isArray(data?.violations)) {
+              for (const v of data.violations) {
+                const item = [v?.field, v?.message].filter(Boolean).join(": ");
+                if (item) collected.push(item);
+              }
+            }
+            if (data?.details) collected.push(String(data.details));
+          } catch {
+            // ignore JSON parse errors
+          }
+        } else {
+          const text = await response.text();
+          if (text) collected.push(text);
+        }
+        setErrors(collected);
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
+      }
+
+      console.log("Cadastro de médico enviado com sucesso");
+      // Mostra mensagem de sucesso e rola para o topo
+      setSuccess("Cadastro realizado com sucesso! Você será redirecionado.");
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      // Redireciona para login do médico após breve pausa
+      setTimeout(() => router.push("/medicos/login-medico"), 1000);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Ocorreu um erro ao enviar o cadastro.";
+      setErrors([message]);
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      console.error("Falha ao enviar cadastro de médico:", err);
+    }
   };
 
   return (
@@ -104,9 +253,21 @@ export default function Register() {
               <h2 className="text-2xl font-semibold">Cadastre seu perfil profissional como médico(a) no Pass+</h2>
             </div>
 
-            {error && (
+            {errors.length > 0 && (
               <div className="px-6 pt-4">
-                <p className="text-red-600 text-sm text-center">{error}</p>
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md p-3">
+                  <p className="font-medium mb-1 text-center">Corrija os seguintes pontos:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    {errors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+            {success && (
+              <div className="px-6 pt-4">
+                <p className="text-green-600 text-sm text-center font-medium">{success}</p>
               </div>
             )}
 
@@ -124,6 +285,7 @@ export default function Register() {
                     placeholder="Nome"
                     className="h-11"
                     required
+                    autoComplete="given-name"
                   />
                   <Input
                     id="lastName"
@@ -134,6 +296,7 @@ export default function Register() {
                     placeholder="Sobrenome"
                     className="h-11"
                     required
+                    autoComplete="family-name"
                   />
                 </div>
               </div>
@@ -151,6 +314,7 @@ export default function Register() {
                   onChange={handleInputChange}
                   placeholder="ex: meuemail@exemplo.com"
                   className="h-11"
+                  autoComplete="email"
                   required
                 />
                 <p className="text-[12px] text-gray-500">exemplo@exemplo.com</p>
@@ -183,6 +347,7 @@ export default function Register() {
                     accept="image/*"
                     onChange={handleFileChange}
                     className="hidden"
+                    required
                   />
                 </div>
                 <p className="text-[12px] text-gray-500">Escolha uma foto clara e convidativa para convencer seus pacientes.</p>
@@ -202,6 +367,7 @@ export default function Register() {
                     onChange={handleInputChange}
                     placeholder="(11) 91234-5678"
                     className="h-11"
+                    autoComplete="tel"
                     required
                   />
                 </div>
@@ -217,6 +383,7 @@ export default function Register() {
                     onChange={handleInputChange}
                     placeholder="123.456.789-00"
                     className="h-11"
+                    autoComplete="off"
                     required
                   />
                 </div>
@@ -234,6 +401,7 @@ export default function Register() {
                     onChange={handleInputChange}
                     placeholder="Dia"
                     className="h-11"
+                    autoComplete="bday-day"
                     required
                   />
                   <Input
@@ -244,6 +412,7 @@ export default function Register() {
                     onChange={handleInputChange}
                     placeholder="Mês"
                     className="h-11"
+                    autoComplete="bday-month"
                     required
                   />
                   <Input
@@ -254,26 +423,54 @@ export default function Register() {
                     onChange={handleInputChange}
                     placeholder="Ano"
                     className="h-11"
+                    autoComplete="bday-year"
                     required
                   />
                 </div>
               </div>
 
               {/* CRM */}
-              <div className="space-y-2">
-                <Label htmlFor="crm" className="text-sm">
-                  CRM
-                </Label>
-                <Input
-                  id="crm"
-                  name="crm"
-                  type="text"
-                  value={formData.crm}
-                  onChange={handleInputChange}
-                  placeholder="CRM/SP 123456"
-                  className="h-11"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="crm" className="text-sm">
+                    CRM
+                  </Label>
+                  <Input
+                    id="crm"
+                    name="crm"
+                    type="text"
+                    value={formData.crm}
+                    onChange={handleInputChange}
+                    placeholder="CRM/SP 123456"
+                    className="h-11"
+                    autoComplete="off"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="specialty" className="text-sm">
+                    Especialidade
+                  </Label>
+                  <div>
+                    <Input
+                      id="specialty"
+                      name="specialty"
+                      type="text"
+                      value={formData.specialty}
+                      onChange={handleInputChange}
+                      placeholder="Ex: Cardiologia, Pediatria, Dermatologia..."
+                      className="h-11"
+                      list="specialties"
+                      autoComplete="off"
+                      required
+                    />
+                    <datalist id="specialties">
+                      {SPECIALTIES.map((s) => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
               </div>
 
               {/* Sobre (Comentários) */}
@@ -306,6 +503,7 @@ export default function Register() {
                       onChange={handleInputChange}
                       placeholder="Crie sua senha"
                       className="h-11 pr-10"
+                      autoComplete="new-password"
                       required
                     />
                     <button
@@ -331,6 +529,7 @@ export default function Register() {
                       onChange={handleInputChange}
                       placeholder="Confirme sua senha"
                       className="h-11 pr-10"
+                      autoComplete="new-password"
                       required
                     />
                     <button

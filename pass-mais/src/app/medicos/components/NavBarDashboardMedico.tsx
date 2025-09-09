@@ -7,8 +7,14 @@ export default function NavBarDashboardMedico() {
     const router = useRouter();
 
     const handleLogout = () => {
-        // Simulação de logout (substitua por lógica real, ex.: limpar token)
-        router.push("/medicos/login-medico");
+        try {
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+            }
+        } finally {
+            router.push("/medicos/login-medico");
+        }
     };
 
     return (
