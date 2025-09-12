@@ -6,7 +6,8 @@ import { MdPeople, MdMedicalServices, MdEventAvailable, MdReviews } from "react-
 
 export default async function AdminPainel() {
   const session = await getServerSession(authOptions);
-  const cookieRole = cookies().get('role')?.value;
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get('role')?.value;
   const sessionRole = session?.user?.role;
   const normalized = (cookieRole || sessionRole || '').toString().trim().toLowerCase();
   const isAdmin = normalized === 'administrator' || normalized === 'admin';
