@@ -2,8 +2,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { MdDashboard, MdAssignment, MdRateReview, MdQueue, MdDescription, MdGroup } from "react-icons/md";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const roleCookie = cookies().get("role")?.value ?? "";
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const roleCookie = cookieStore.get("role")?.value ?? "";
   const isAdmin = /^(administrator|admin)$/i.test(roleCookie);
 
   return (
@@ -54,4 +55,3 @@ function NavItem({ href, icon, children }: { href: string; icon: React.ReactNode
     </Link>
   );
 }
-
