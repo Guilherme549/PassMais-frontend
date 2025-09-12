@@ -40,7 +40,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-          IMAGE_TAG: frontend-container
+          IMAGE_TAG: frontend
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f ./pass-mais/Dockerfile ./pass-mais
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
