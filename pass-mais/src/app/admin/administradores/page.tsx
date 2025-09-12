@@ -21,7 +21,8 @@ const MOCK: AdminUser[] = [
 
 export default async function AdminAdministradores() {
   const session = await getServerSession(authOptions);
-  const cookieRole = cookies().get('role')?.value;
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get('role')?.value;
   const role = (cookieRole || session?.user?.role || '').toString().trim().toLowerCase();
   const isAdmin = role === 'administrator' || role === 'admin';
   if (!isAdmin) redirect('/login');
@@ -135,4 +136,3 @@ function Th({ children, className = '' }: { children: React.ReactNode; className
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-5 py-3 text-gray-700 ${className}`}>{children}</td>;
 }
-
