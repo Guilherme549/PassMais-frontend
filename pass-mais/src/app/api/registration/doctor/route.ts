@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json();
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://api.passmais.com.br:444";
 
     const upstream = await fetch(`${apiBase}/api/registration/doctor`, {
       method: "POST",

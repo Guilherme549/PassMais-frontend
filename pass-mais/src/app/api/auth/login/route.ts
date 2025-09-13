@@ -2,7 +2,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const apiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+    const apiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://api.passmais.com.br:444";
     const url = `${apiBase.replace(/\/$/, "")}/api/auth/login`;
 
     const upstream = await fetch(url, {

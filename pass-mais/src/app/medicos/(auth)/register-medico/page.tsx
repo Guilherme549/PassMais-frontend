@@ -180,7 +180,7 @@ export default function Register() {
     };
 
     try {
-      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.passmais.com.br:444").replace(/\/$/, "");
       const response = await fetch(`${apiBase}/api/registration/doctor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

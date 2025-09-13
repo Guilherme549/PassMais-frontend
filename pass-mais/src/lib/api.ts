@@ -1,6 +1,6 @@
 // Central API client with token handling and refresh.
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.passmais.com.br:444").replace(/\/$/, "");
 
 let accessTokenMemory: string | null = null;
 

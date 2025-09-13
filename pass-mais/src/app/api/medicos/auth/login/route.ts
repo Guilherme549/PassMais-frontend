@@ -2,7 +2,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const upstream = await fetch("http://localhost:8080/api/auth/login", {
+    const upstream = await fetch("https://api.passmais.com.br:444/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
