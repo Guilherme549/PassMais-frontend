@@ -150,13 +150,13 @@ export default function ApprovalsContent() {
                       <div className="flex items-center justify-end gap-3 text-gray-600">
                     <button
                       onClick={() => openDetail(item)}
-                      className="hover:text-gray-900"
+                      className="hover:text-gray-900 cursor-pointer"
                       aria-label="Visualizar"
                     >
                       <MdVisibility />
                     </button>
-                        <button className="text-emerald-600 hover:text-emerald-700" aria-label="Aprovar"><MdCheck /></button>
-                        <button className="text-rose-500 hover:text-rose-600" aria-label="Rejeitar"><MdClose /></button>
+                        <button className="text-emerald-600 hover:text-emerald-700 cursor-pointer" aria-label="Aprovar"><MdCheck /></button>
+                        <button className="text-rose-500 hover:text-rose-600 cursor-pointer" aria-label="Rejeitar"><MdClose /></button>
                       </div>
                     </Td>
                   </tr>
