@@ -1,8 +1,14 @@
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const apiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.passmais.com.br:444";
-    const url = `${apiBase.replace(/\/$/, "")}/api/auth/register`;
+    const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    if (!base) {
+      return new Response(
+        JSON.stringify({ message: "NEXT_PUBLIC_API_BASE_URL não definido" }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
+    const url = `${base}/api/auth/register`;
 
     const upstream = await fetch(url, {
       method: "POST",

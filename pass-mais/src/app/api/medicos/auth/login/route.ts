@@ -2,8 +2,14 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const apiUrl = process.env.API_URL as string; // definido no .env
-    const upstream = await fetch(`${apiUrl}/api/auth/login`, {
+    const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    if (!base) {
+      return new Response(
+        JSON.stringify({ message: "NEXT_PUBLIC_API_BASE_URL não definido" }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
+    const upstream = await fetch(`${base}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

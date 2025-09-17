@@ -1,6 +1,6 @@
 // Central API client with token handling and refresh.
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.passmais.com.br:444").replace(/\/$/, "");
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 let accessTokenMemory: string | null = null;
 
@@ -65,7 +65,12 @@ async function refreshTokens(): Promise<boolean> {
 type ApiFetchInit = RequestInit & { rawUrl?: string };
 
 export async function apiFetch(path: string, init: ApiFetchInit = {}): Promise<Response> {
-  const url = init.rawUrl ? init.rawUrl : `${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  // If the path targets Next.js API routes ("/api/..."), keep it same-origin to avoid CORS
+  const url = init.rawUrl
+    ? init.rawUrl
+    : (path.startsWith("/api/")
+        ? path
+        : `${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
   const headers = new Headers(init.headers || {});
 
   const hasFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
@@ -121,4 +126,3 @@ export async function jsonGet<T>(path: string, init: ApiFetchInit = {}): Promise
 }
 
 export { BASE_URL };
-

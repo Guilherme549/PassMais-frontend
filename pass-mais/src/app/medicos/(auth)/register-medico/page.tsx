@@ -180,8 +180,8 @@ export default function Register() {
     };
 
     try {
-      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.passmais.com.br:444").replace(/\/$/, "");
-      const response = await fetch(`${apiBase}/api/registration/doctor`, {
+      // Usa o proxy do Next.js para evitar CORS e centralizar o uso de NEXT_PUBLIC_API_BASE_URL no servidor
+      const response = await fetch(`/api/registration/doctor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(doctorData),
