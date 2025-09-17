@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { MdDashboard, MdAssignment, MdRateReview, MdQueue, MdDescription, MdGroup } from "react-icons/md";
+import AdminLogoutButton from "./components/AdminLogoutButton";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -35,6 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold">AD</div>
             <span className="text-sm text-gray-700">Admin</span>
+            <AdminLogoutButton />
           </div>
         </header>
 
