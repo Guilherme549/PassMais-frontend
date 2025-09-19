@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 
-type RouteParams = { params: { id: string } | Promise<{ id: string }> };
+type RouteContext = {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+};
 
-export async function POST(req: NextRequest, context: RouteParams) {
+export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
     if (!base) {
@@ -12,8 +14,9 @@ export async function POST(req: NextRequest, context: RouteParams) {
       );
     }
 
-    const params = await Promise.resolve(context.params);
-    const { id } = params;
+    const resolvedParams = params ? await params : undefined;
+    const rawId = resolvedParams?.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     if (!id) {
       return new Response(
         JSON.stringify({ message: "Parâmetro id é obrigatório" }),
