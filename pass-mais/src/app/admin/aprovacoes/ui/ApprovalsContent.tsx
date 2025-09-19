@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { MdVisibility, MdCheck, MdClose } from 'react-icons/md';
-import { jsonGet } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import { jsonGet, jsonPost } from '@/lib/api';
 
 type PendingDoctor = {
   id: string;
@@ -39,6 +40,14 @@ type DoctorProfile = {
   updatedAt: string; // ISO
 };
 
+type ApproveDoctorResponse = {
+  message?: string;
+  doctor?: {
+    id: string;
+    approved_at?: string;
+  };
+};
+
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
@@ -52,6 +61,8 @@ function formatDate(iso: string): string {
 }
 
 export default function ApprovalsContent() {
+  const router = useRouter();
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [data, setData] = useState<PendingDoctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +70,17 @@ export default function ApprovalsContent() {
   const [detail, setDetail] = useState<DoctorProfile | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [actionDoctorId, setActionDoctorId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [rejectDoctor, setRejectDoctor] = useState<PendingDoctor | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -92,12 +114,95 @@ export default function ApprovalsContent() {
     }
   };
 
+  const handleApprove = async (item: PendingDoctor) => {
+    if (!item?.id) return;
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+      redirectTimeoutRef.current = null;
+    }
+    setActionError(null);
+    setSuccessMessage(null);
+    setActionDoctorId(item.id);
+    try {
+      const response = await jsonPost<ApproveDoctorResponse>(`/api/admin/approve/doctor/${item.id}`, {});
+      const message = response?.message || 'Médico aprovado com sucesso.';
+      setSuccessMessage(message);
+      setData((prev) => prev.filter((doc) => doc.id !== item.id));
+      setShowDetail(false);
+      redirectTimeoutRef.current = setTimeout(() => {
+        router.replace('/admin/aprovacoes');
+        router.refresh();
+      }, 1500);
+    } catch (e: any) {
+      setActionError(e?.message || 'Falha ao aprovar médico.');
+    } finally {
+      setActionDoctorId(null);
+    }
+  };
+
+  const openRejectModal = (item: PendingDoctor) => {
+    setRejectDoctor(item);
+    setRejectReason('');
+    setRejectError(null);
+  };
+
+  const closeRejectModal = () => {
+    if (rejectLoading) return;
+    setRejectDoctor(null);
+    setRejectReason('');
+    setRejectError(null);
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!rejectDoctor?.id) return;
+    if (!rejectReason.trim()) {
+      setRejectError('Informe o motivo da reprovação.');
+      return;
+    }
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+      redirectTimeoutRef.current = null;
+    }
+    setRejectLoading(true);
+    setRejectError(null);
+    setSuccessMessage(null);
+    try {
+      const response = await jsonPost<{ message?: string }>(`/api/admin/reject/doctor/${rejectDoctor.id}`, {
+        description: rejectReason.trim(),
+      });
+      const message = response?.message || 'Médico reprovado com sucesso.';
+      setSuccessMessage(message);
+      setData((prev) => prev.filter((doc) => doc.id !== rejectDoctor.id));
+      setShowDetail(false);
+      setRejectDoctor(null);
+      setRejectReason('');
+      redirectTimeoutRef.current = setTimeout(() => {
+        router.replace('/admin/aprovacoes');
+        router.refresh();
+      }, 1500);
+    } catch (e: any) {
+      setRejectError(e?.message || 'Falha ao reprovar médico.');
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
   const totalPendentes = data.length;
   const medicosPendentes = data.length;
   const pacientesPendentes = 0; // Endpoint atual retorna somente médicos
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {successMessage}
+        </div>
+      )}
+      {actionError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {actionError}
+        </div>
+      )}
       <section className="space-y-3">
         <h2 className="font-medium text-lg">Aprovações Pendentes</h2>
         <p className="text-sm text-gray-600">Gerencie as solicitações de cadastro de médicos e pacientes</p>
@@ -148,15 +253,28 @@ export default function ApprovalsContent() {
                     </Td>
                     <Td className="text-right">
                       <div className="flex items-center justify-end gap-3 text-gray-600">
-                    <button
-                      onClick={() => openDetail(item)}
-                      className="hover:text-gray-900 cursor-pointer"
-                      aria-label="Visualizar"
-                    >
-                      <MdVisibility />
-                    </button>
-                        <button className="text-emerald-600 hover:text-emerald-700 cursor-pointer" aria-label="Aprovar"><MdCheck /></button>
-                        <button className="text-rose-500 hover:text-rose-600 cursor-pointer" aria-label="Rejeitar"><MdClose /></button>
+                        <button
+                          onClick={() => openDetail(item)}
+                          className="hover:text-gray-900 cursor-pointer"
+                          aria-label="Visualizar"
+                        >
+                          <MdVisibility />
+                        </button>
+                        <button
+                          onClick={() => handleApprove(item)}
+                          disabled={actionDoctorId === item.id}
+                          className="text-emerald-600 hover:text-emerald-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label="Aprovar"
+                        >
+                          <MdCheck className={actionDoctorId === item.id ? 'animate-pulse' : undefined} />
+                        </button>
+                        <button
+                          onClick={() => openRejectModal(item)}
+                          className="text-rose-500 hover:text-rose-600 cursor-pointer"
+                          aria-label="Reprovar Médico"
+                        >
+                          <MdClose />
+                        </button>
                       </div>
                     </Td>
                   </tr>
@@ -180,6 +298,17 @@ export default function ApprovalsContent() {
           error={detailError}
           doctor={detail}
           onClose={() => setShowDetail(false)}
+        />
+      )}
+      {rejectDoctor && (
+        <RejectDoctorModal
+          doctor={rejectDoctor}
+          reason={rejectReason}
+          loading={rejectLoading}
+          error={rejectError}
+          onChangeReason={setRejectReason}
+          onClose={closeRejectModal}
+          onSubmit={handleRejectSubmit}
         />
       )}
     </div>
@@ -276,6 +405,94 @@ function Info({ label, value }: { label: string; value?: string | null }) {
     <div className="bg-white border border-gray-200 rounded-lg p-3">
       <div className="text-xs text-gray-500">{label}</div>
       <div className="text-gray-800 mt-0.5 break-words">{value || '-'}</div>
+    </div>
+  );
+}
+
+function RejectDoctorModal({
+  doctor,
+  reason,
+  loading,
+  error,
+  onChangeReason,
+  onClose,
+  onSubmit,
+}: {
+  doctor: PendingDoctor;
+  reason: string;
+  loading: boolean;
+  error: string | null;
+  onChangeReason: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!loading) onSubmit();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={loading ? undefined : onClose} />
+      <div className="relative bg-white w-full max-w-lg mx-4 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <h3 className="font-semibold text-lg">Reprovar Médico</h3>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Fechar modal"
+          >
+            <MdClose size={20} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <div className="text-sm text-gray-500">Médico selecionado</div>
+            <div className="text-base font-medium text-gray-900">{doctor.name}</div>
+            {doctor.specialty && (
+              <div className="text-sm text-gray-600">{doctor.specialty}</div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="reject-reason" className="text-sm font-medium text-gray-700">
+              Motivo da reprovação
+            </label>
+            <textarea
+              id="reject-reason"
+              name="reject-reason"
+              className="w-full min-h-[120px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:bg-gray-100"
+              placeholder="Descreva o motivo da reprovação"
+              value={reason}
+              onChange={(event) => onChangeReason(event.target.value)}
+              disabled={loading}
+            />
+            <p className="text-xs text-gray-500">Esta informação será enviada ao médico.</p>
+          </div>
+          {error && (
+            <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 text-sm rounded-md bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Enviando...' : 'Enviar'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
