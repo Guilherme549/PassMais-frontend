@@ -3,64 +3,97 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ClientMedicalAppointments from "./components/ClientMedicalAppointments";
-
-interface Doctor {
-    id: number;
-    name: string;
-    specialty: string;
-    crm: string;
-    rating: number;
-    reviewsCount: number;
-    address: string;
-}
+import { fallbackDoctors } from "./fallbackDoctors";
+import { type Doctor } from "./types";
 
 export default function MedicalAppointments() {
     const router = useRouter();
     const [ready, setReady] = useState(false);
+    const [doctors, setDoctors] = useState<Doctor[] | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let isMounted = true;
+
+        async function loadDoctors(token: string) {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const response = await fetch("/api/doctors/search", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || "Falha ao carregar médicos");
+                }
+
+                const data = (await response.json()) as unknown[];
+                const normalized = normalizeDoctors(data);
+                if (isMounted) {
+                    if (normalized.length === 0) {
+                        setError("Nenhum médico encontrado. Mostrando dados temporários.");
+                        setDoctors(fallbackDoctors);
+                    } else {
+                        setDoctors(normalized);
+                    }
+                }
+            } catch (err) {
+                console.error("Erro ao buscar médicos", err);
+                if (isMounted) {
+                    setError("Não foi possível carregar os médicos. Mostrando dados temporários.");
+                    setDoctors(fallbackDoctors);
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false);
+                }
+            }
+        }
+
         try {
             const token = localStorage.getItem("accessToken");
             if (!token) {
                 router.replace("/login");
             } else {
                 setReady(true);
+                loadDoctors(token);
             }
         } catch {
             router.replace("/login");
         }
+
+        return () => {
+            isMounted = false;
+        };
     }, [router]);
 
-    const doctors: Doctor[] = [
-        {
-            id: 1,
-            name: "Dr. Nome do Médico",
-            specialty: "Cirurgião geral",
-            crm: "00/0000",
-            rating: 4.5,
-            reviewsCount: 127,
-            address: "R. Ana Luiza Souza, Qd. 24 - Lt. 288 - Jundiaí, Anápolis - GO, 75110-030",
-        },
-        {
-            id: 2,
-            name: "Dr. João Silva",
-            specialty: "Cardiologista",
-            crm: "01/1111",
-            rating: 4.7,
-            reviewsCount: 95,
-            address: "Av. Brasil, 100 - Centro, Goiânia - GO, 74000-000",
-        },
-        {
-            id: 3,
-            name: "Dra. Maria Oliveira",
-            specialty: "Dermatologista",
-            crm: "02/2222",
-            rating: 4.8,
-            reviewsCount: 150,
-            address: "Rua 10, 500 - Setor Oeste, Goiânia - GO, 74120-020",
-        },
-    ];
-
     if (!ready) return null;
-    return <ClientMedicalAppointments doctors={doctors} />;
+
+    return (
+        <ClientMedicalAppointments doctors={doctors} isLoading={isLoading} error={error} />
+    );
+}
+
+function normalizeDoctors(data: unknown[]): Doctor[] {
+    return data
+        .map((item) => {
+            const raw = item as Record<string, unknown>;
+            const id = raw?.id != null ? String(raw.id) : "";
+            if (!id) return null;
+            return {
+                id,
+                name: typeof raw.name === "string" ? raw.name : "Nome não informado",
+                specialty: typeof raw.specialty === "string" ? raw.specialty : "Especialidade não informada",
+                crm: typeof raw.crm === "string" ? raw.crm : "CRM não informado",
+                bio: typeof raw.bio === "string" ? raw.bio : "",
+                averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
+                reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
+                address: typeof raw.address === "string" ? raw.address : null,
+            } satisfies Doctor;
+        })
+        .filter((doctor): doctor is Doctor => Boolean(doctor));
 }

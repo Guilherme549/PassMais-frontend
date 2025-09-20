@@ -1,22 +1,14 @@
 "use client";
 
 import NavBar from "@/components/NavBar";
-import { Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { type Doctor } from "../types";
 import DoctorModal from "./DoctorModal";
 import SearchBar from "./SearchBar";
 
-interface Doctor {
-  id: number;
-  name: string;
-  specialty: string;
-  crm: string;
-  rating: number;
-  reviewsCount: number;
-  address: string;
-}
+export type { Doctor } from "../types";
 
 interface DoctorCardProps {
   doctor: Doctor;
@@ -63,20 +55,11 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
           <div className="space-y-3">
             <h2 className="text-3xl font-bold text-gray-900 tracking-tight">{doctor.name}</h2>
             <p className="text-lg text-gray-600">{doctor.specialty} - CRM {doctor.crm}</p>
-            <div className="flex items-center gap-2">
-              <div className="flex text-yellow-400">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`w-5 h-5 ${i < Math.floor(doctor.rating) ? "fill-current" : "text-gray-300"}`}
-                  />
-                ))}
-              </div>
-              <span className="text-lg text-gray-600">({doctor.rating}) • {doctor.reviewsCount} avaliações</span>
-            </div>
             <div className="pt-2">
-              <span className="text-lg font-semibold text-gray-900">Endereço:</span>
-              <p className="text-lg text-gray-600 leading-relaxed w-[500px]">{doctor.address}</p>
+              <span className="text-lg font-semibold text-gray-900">Biografia:</span>
+              <p className="text-lg text-gray-600 leading-relaxed w-[500px]">
+                {doctor.bio || "Biografia não informada."}
+              </p>
             </div>
           </div>
         </div>
@@ -98,8 +81,12 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
 
 export default function ClientMedicalAppointments({
   doctors,
+  isLoading = false,
+  error,
 }: {
   doctors: Doctor[] | null;
+  isLoading?: boolean;
+  error?: string | null;
 }) {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [loadedDoctors, setLoadedDoctors] = useState<Doctor[] | null>(doctors);
@@ -137,7 +124,7 @@ export default function ClientMedicalAppointments({
         doctor.specialty.toLowerCase().includes(specialty.toLowerCase());
       const matchesCity =
         city === "" ||
-        doctor.address.toLowerCase().includes(city.toLowerCase());
+        (doctor.address ?? "").toLowerCase().includes(city.toLowerCase());
       return matchesSpecialty && matchesCity;
     });
 
@@ -154,7 +141,11 @@ export default function ClientMedicalAppointments({
           </h2>
           <div className="space-y-8">
             <SearchBar onSubmit={handleSearch} />
-            {filteredDoctors && filteredDoctors.length > 0 ? (
+            {isLoading ? (
+              <p className="text-gray-600 text-lg">Carregando médicos...</p>
+            ) : error ? (
+              <p className="text-red-600 text-lg">{error}</p>
+            ) : filteredDoctors && filteredDoctors.length > 0 ? (
               filteredDoctors.map((doctor) => (
                 <DoctorCard
                   key={doctor.id}

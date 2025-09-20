@@ -5,22 +5,15 @@ import NavBar from "@/components/NavBar";
 import Link from "next/link";
 import { Star, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Doctor as DoctorSummary } from "@/app/medical-appointments/types";
 
 interface AvailableSlot {
     date: string;
     times: string[];
 }
 
-interface Doctor {
-    id: number;
-    name: string;
-    specialty: string;
-    crm: string;
-    rating: number;
-    reviewsCount: number;
-    address: string;
-    bio: string;
-    consultationFee: number;
+interface Doctor extends DoctorSummary {
+    consultationFee?: number | null;
     availableSlots: AvailableSlot[];
 }
 
@@ -92,13 +85,13 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
                         <div className="flex items-center gap-1 mb-2">
                             <Star className="text-yellow-400" size={16} />
                             <span className="text-gray-600">
-                                {doctor.rating} ({doctor.reviewsCount} avaliações)
+                                {(doctor.averageRating ?? 0).toFixed(1)} ({doctor.reviewsCount ?? 0} avaliações)
                             </span>
                         </div>
                         <p className="text-gray-600 mb-2">{doctor.address}</p>
-                        <p className="text-gray-600 mb-4">{doctor.bio}</p>
+                        <p className="text-gray-600 mb-4">{doctor.bio || "Biografia não informada."}</p>
                         <p className="text-gray-600 font-semibold">
-                            Valor da consulta: {formatCurrency(doctor.consultationFee)}
+                            Valor da consulta: {formatCurrency(doctor.consultationFee ?? 0)}
                         </p>
                     </div>
 
