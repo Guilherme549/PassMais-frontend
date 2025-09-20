@@ -28,7 +28,7 @@ const roboto = Roboto({
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={`${roboto.className} ${roboto.variable} bg-gray-100`}>
+      <body suppressHydrationWarning className={`${roboto.className} ${roboto.variable} bg-gray-100`}>
         {children}
       </body>
     </html>
