@@ -122,6 +122,7 @@ export default function Home() {
                 alt="Pessoa usando o app no celular"
                 width={500}
                 height={500}
+                priority
                 className="w-full max-w-md mx-auto rounded-4xl"
               />
             </div>
