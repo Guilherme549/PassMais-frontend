@@ -1,88 +1,157 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import ClientDoctorProfile from "./components/ClientDoctorProfile";
+"use client";
 
-// Definir a interface do médico
-interface Doctor {
-    id: number;
-    name: string;
-    specialty: string;
-    crm: string;
-    rating: number;
-    reviewsCount: number;
-    address: string;
-    bio: string;
-    consultationFee: number;
-    availableSlots: { date: string; times: string[] }[];
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import ClientDoctorProfile from "./components/ClientDoctorProfile";
+import type { Doctor as DoctorSummary } from "@/app/medical-appointments/types";
+import { fallbackDoctors } from "@/app/medical-appointments/fallbackDoctors";
+
+interface AvailableSlot {
+    date: string;
+    times: string[];
 }
 
-// Usar uma tipagem genérica para evitar o erro com PageProps
-export default async function DoctorProfile({ params }: any) {
-    const session = await getServerSession();
+interface DoctorProfile extends DoctorSummary {
+    consultationFee?: number | null;
+    availableSlots: AvailableSlot[];
+}
 
-    if (!session) {
-        redirect("/");
-    }
+export default function DoctorProfilePage() {
+    const router = useRouter();
+    const params = useParams<{ id: string }>();
+    const doctorId = params?.id ?? "";
 
-    // Dados fictícios do médico (em um cenário real, isso viria de um banco de dados)
-    const doctors: Doctor[] = [
-        {
-            id: 1,
-            name: "Dr. Nome do Médico",
-            specialty: "Cirurgião geral",
-            crm: "00/0000",
-            rating: 4.5,
-            reviewsCount: 127,
-            address: "R. Ana Luiza Souza, Qd. 24 - Lt. 288 - Jundiaí, Anápolis - GO, 75110-030",
-            bio: "Médico cirurgião geral com mais de 15 anos de experiência, especializado em cirurgias minimamente invasivas e atendimento humanizado.",
-            consultationFee: 300,
-            availableSlots: [
-                { date: "2025-05-26", times: ["09:00", "10:00", "11:00"] },
-                { date: "2025-05-27", times: ["14:00", "15:00", "16:00"] },
-                { date: "2025-05-28", times: ["09:00", "10:00"] },
-            ],
-        },
-        {
-            id: 2,
-            name: "Dr. João Silva",
-            specialty: "Cardiologista",
-            crm: "01/1111",
-            rating: 4.7,
-            reviewsCount: 95,
-            address: "Av. Brasil, 100 - Centro, Goiânia - GO, 74000-000",
-            bio: "Cardiologista renomado com foco em prevenção e tratamento de doenças cardiovasculares, com mais de 10 anos de experiência.",
-            consultationFee: 350,
-            availableSlots: [
-                { date: "2025-05-26", times: ["13:00", "14:00", "15:00"] },
-                { date: "2025-05-27", times: ["09:00", "10:00"] },
-                { date: "2025-05-28", times: ["16:00", "17:00"] },
-            ],
-        },
-        {
-            id: 3,
-            name: "Dra. Maria Oliveira",
-            specialty: "Dermatologista",
-            crm: "02/2222",
-            rating: 4.8,
-            reviewsCount: 150,
-            address: "Rua 10, 500 - Setor Oeste, Goiânia - GO, 74120-020",
-            bio: "Dermatologista especializada em tratamentos estéticos e clínicos, com ampla experiência em doenças de pele e rejuvenescimento.",
-            consultationFee: 400,
-            availableSlots: [
-                { date: "2025-05-26", times: ["10:00", "11:00"] },
-                { date: "2025-05-27", times: ["14:00", "15:00", "16:00"] },
-                { date: "2025-05-28", times: ["09:00", "10:00", "11:00"] },
-            ],
-        },
-    ];
+    const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Acessar params.id de forma explícita
-    const doctorId = parseInt(params.id);
-    const doctor = doctors.find((doc) => doc.id === doctorId);
+    useEffect(() => {
+        let isMounted = true;
 
-    if (!doctor) {
-        redirect("/medical-appointments");
-    }
+        async function loadDoctor() {
+            const token = localStorage.getItem("accessToken");
+            if (!token) {
+                router.replace("/login");
+                return;
+            }
+
+            if (!doctorId) {
+                router.replace("/medical-appointments");
+                return;
+            }
+
+            setIsLoading(true);
+            try {
+                const response = await fetch("/api/doctors/search", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const doctors = (await response.json()) as unknown[];
+                const normalized = normalizeDoctors(doctors);
+                const found = normalized.find((doc) => doc.id === doctorId);
+
+                if (found) {
+                    if (isMounted) setDoctor(buildDoctorProfile(found));
+                    return;
+                }
+
+                if (!applyFallbackDoctor(doctorId, isMounted, setDoctor)) {
+                    router.replace("/medical-appointments");
+                }
+            } catch (error) {
+                console.error("Erro ao carregar perfil do médico", error);
+                if (!applyFallbackDoctor(doctorId, isMounted, setDoctor)) {
+                    if (isMounted) {
+                        router.replace("/medical-appointments");
+                    }
+                }
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        }
+
+        loadDoctor();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [doctorId, router]);
+
+    if (isLoading || !doctor) return null;
 
     return <ClientDoctorProfile doctor={doctor} />;
+}
+
+function buildDoctorProfile(base: DoctorSummary): DoctorProfile {
+    return {
+        ...base,
+        bio: base.bio || "Biografia não informada.",
+        address: base.address ?? "Endereço não informado.",
+        consultationFee: deriveConsultationFee(base.id),
+        availableSlots: generateDefaultSlots(base.id),
+    };
+}
+
+function normalizeDoctors(data: unknown[]): DoctorSummary[] {
+    return data
+        .map((item) => {
+            const raw = item as Record<string, unknown>;
+            const id = raw?.id != null ? String(raw.id) : "";
+            if (!id) return null;
+            return {
+                id,
+                name: typeof raw.name === "string" ? raw.name : "Nome não informado",
+                specialty: typeof raw.specialty === "string" ? raw.specialty : "Especialidade não informada",
+                crm: typeof raw.crm === "string" ? raw.crm : "CRM não informado",
+                bio: typeof raw.bio === "string" ? raw.bio : "",
+                averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
+                reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
+                address: typeof raw.address === "string" ? raw.address : null,
+            } satisfies DoctorSummary;
+        })
+        .filter((doctor): doctor is DoctorSummary => Boolean(doctor));
+}
+
+function applyFallbackDoctor(
+    doctorId: string,
+    isMounted: boolean,
+    setDoctor: (doctor: DoctorProfile) => void,
+): boolean {
+    const fallback = fallbackDoctors.find((doc) => doc.id === doctorId);
+    if (!fallback) return false;
+    if (isMounted) {
+        setDoctor(buildDoctorProfile(fallback));
+    }
+    return true;
+}
+
+function deriveConsultationFee(id: string): number {
+    const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const baseFee = 200;
+    const variation = (hash % 6) * 20; // Gera valores entre 0 e 100
+    return baseFee + variation;
+}
+
+function generateDefaultSlots(id: string): AvailableSlot[] {
+    const baseTimes = [
+        ["09:00", "10:00", "11:00"],
+        ["13:00", "14:00", "15:00"],
+        ["16:00", "17:00"],
+    ];
+    const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+    return Array.from({ length: 3 }).map((_, index) => {
+        const date = new Date();
+        date.setDate(date.getDate() + index + 1);
+        const times = baseTimes[(hash + index) % baseTimes.length];
+        return {
+            date: date.toISOString().split("T")[0],
+            times,
+        };
+    });
 }
