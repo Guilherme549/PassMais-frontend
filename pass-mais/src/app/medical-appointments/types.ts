@@ -6,5 +6,6 @@ export interface Doctor {
     bio: string;
     averageRating: number;
     reviewsCount: number;
+    photo: string | null;
     address?: string | null;
 }

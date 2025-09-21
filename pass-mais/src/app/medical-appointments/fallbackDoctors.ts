@@ -9,6 +9,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Profissional especializado em cirurgias minimamente invasivas, com foco em atendimento humanizado e seguro.",
         averageRating: 4.5,
         reviewsCount: 127,
+        photo: "/doctor.png",
         address: "R. Ana Luiza Souza, Qd. 24 - Lt. 288 - Jundiaí, Anápolis - GO, 75110-030",
     },
     {
@@ -19,6 +20,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Cardiologista com experiência em prevenção e tratamento de doenças cardiovasculares, atuando com tecnologia de ponta.",
         averageRating: 4.7,
         reviewsCount: 95,
+        photo: "/doctor.png",
         address: "Av. Brasil, 100 - Centro, Goiânia - GO, 74000-000",
     },
     {
@@ -29,6 +31,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Dermatologista dedicada a tratamentos estéticos e clínicos, com foco em resultados personalizados e cuidados contínuos.",
         averageRating: 4.8,
         reviewsCount: 150,
+        photo: "/doctor.png",
         address: "Rua 10, 500 - Setor Oeste, Goiânia - GO, 74120-020",
     },
 ];

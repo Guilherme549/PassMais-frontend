@@ -3,6 +3,7 @@
 import { useState } from "react";
 import NavBar from "@/components/NavBar";
 import Link from "next/link";
+import Image from "next/image";
 import { Star, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Doctor as DoctorSummary } from "@/app/medical-appointments/types";
@@ -79,14 +80,26 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
 
                     {/* Perfil do Médico */}
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-200">
-                        <h3 className="text-2xl font-semibold text-gray-900 mb-2">{doctor.name}</h3>
-                        <p className="text-gray-600 mb-2">{doctor.specialty}</p>
-                        <p className="text-gray-600 mb-2">CRM: {doctor.crm}</p>
-                        <div className="flex items-center gap-1 mb-2">
-                            <Star className="text-yellow-400" size={16} />
-                            <span className="text-gray-600">
-                                {(doctor.averageRating ?? 0).toFixed(1)} ({doctor.reviewsCount ?? 0} avaliações)
-                            </span>
+                        <div className="flex flex-col sm:flex-row gap-6 mb-4">
+                            <div className="relative w-32 h-32 flex-shrink-0">
+                                <Image
+                                    src={doctor.photo ?? "/doctor.png"}
+                                    alt={`Foto de ${doctor.name}`}
+                                    fill
+                                    className="rounded-xl object-cover border-4 border-gray-100"
+                                />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-semibold text-gray-900 mb-2">{doctor.name}</h3>
+                                <p className="text-gray-600 mb-2">{doctor.specialty}</p>
+                                <p className="text-gray-600 mb-2">CRM: {doctor.crm}</p>
+                                <div className="flex items-center gap-1 mb-2">
+                                    <Star className="text-yellow-400" size={16} />
+                                    <span className="text-gray-600">
+                                        {(doctor.averageRating ?? 0).toFixed(1)} ({doctor.reviewsCount ?? 0} avaliações)
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                         <p className="text-gray-600 mb-2">{doctor.address}</p>
                         <p className="text-gray-600 mb-4">{doctor.bio || "Biografia não informada."}</p>

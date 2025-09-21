@@ -45,7 +45,7 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="relative w-48 h-48 flex-shrink-0">
             <Image
-              src="/doctor.png"
+              src={doctor.photo ?? "/doctor.png"}
               alt="Imagem do médico"
               width={192} // Ajuste conforme necessário
               height={192} // Ajuste conforme necessário

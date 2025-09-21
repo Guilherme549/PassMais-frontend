@@ -92,6 +92,10 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 bio: typeof raw.bio === "string" ? raw.bio : "",
                 averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
                 reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
+                photo:
+                    typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
+                        ? raw.photoUrl
+                        : null,
                 address: typeof raw.address === "string" ? raw.address : null,
             } satisfies Doctor;
         })

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import { Input } from "@/components/ui/input";
@@ -48,7 +48,7 @@ type FormDataState = {
   about: string;
   password: string;
   confirmPassword: string;
-  photo: File;
+  photo: File | null;
   acceptTerms: boolean;
 };
 
@@ -58,7 +58,34 @@ export default function Register() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [success, setSuccess] = useState("");
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const router = useRouter();
+
+  const revokePreview = (url: string | null) => {
+    if (url && url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      revokePreview(photoPreview);
+    };
+  }, [photoPreview]);
+
+  const updatePhotoFile = (file: File | null) => {
+    revokePreview(photoPreview);
+    if (!file) {
+      setPhotoPreview(null);
+      setFormData((prev) => ({ ...prev, photo: null }));
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreview(previewUrl);
+    setFormData((prev) => ({ ...prev, photo: file }));
+    setPhotoError(null);
+  };
 
   const [formData, setFormData] = useState<FormDataState>({
     firstName: "",
@@ -93,19 +120,20 @@ export default function Register() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
-    setFormData((prev) => ({ ...prev, photo: file }));
+    updatePhotoFile(file);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0] || null;
-    setFormData((prev) => ({ ...prev, photo: file }));
+    updatePhotoFile(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
     setSuccess("");
+    setPhotoError(null);
 
     const clientErrors: string[] = [];
     // Basic client-side validations to avoid backend 400
@@ -149,6 +177,11 @@ export default function Register() {
     if (!formData.acceptTerms) {
       clientErrors.push("Você deve aceitar os termos e condições");
     }
+    if (!formData.photo) {
+      const message = "Envie a foto do profissional antes de finalizar o cadastro.";
+      clientErrors.push(message);
+      setPhotoError(message);
+    }
     if (clientErrors.length) {
       setErrors(clientErrors);
       if (typeof window !== "undefined") {
@@ -176,15 +209,20 @@ export default function Register() {
       bio: formData.about,
       specialty: formData.specialty,
       consultationPrice: 1,
-      photoUrl: "",
     };
+
+    const payload = new FormData();
+    payload.append("photoUrl", formData.photo);
+    payload.append(
+      "doctor",
+      new Blob([JSON.stringify(doctorData)], { type: "application/json" })
+    );
 
     try {
       // Usa o proxy do Next.js para evitar CORS e centralizar o uso de NEXT_PUBLIC_API_BASE_URL no servidor
       const response = await fetch(`/api/registration/doctor`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(doctorData),
+        body: payload,
       });
 
       if (!response.ok) {
@@ -229,6 +267,7 @@ export default function Register() {
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
+      updatePhotoFile(null);
       // Redireciona para login do médico após breve pausa
       setTimeout(() => router.push("/medicos/login-medico"), 1000);
     } catch (err: unknown) {
@@ -243,6 +282,8 @@ export default function Register() {
       console.error("Falha ao enviar cadastro de médico:", err);
     }
   };
+
+  const previewImage = photoPreview;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F5F6FA]">
@@ -322,12 +363,18 @@ export default function Register() {
 
               {/* Upload da foto com área de drop */}
               <div className="space-y-2">
-                <Label className="text-sm">Foto do profissional</Label>
+                <Label className="text-sm">
+                  Foto do profissional <span className="text-red-600">*</span>
+                </Label>
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex flex-col items-center justify-center w-full h-36 rounded-md border-2 border-dashed border-gray-300 bg-gray-50 text-center cursor-pointer hover:bg-gray-100 transition"
+                  className={`flex flex-col items-center justify-center w-full h-36 rounded-md border-2 border-dashed text-center cursor-pointer transition ${
+                    photoError
+                      ? "border-red-400 bg-red-50 hover:bg-red-100"
+                      : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  }`}
                 >
                   <UploadCloud className="text-gray-400" size={28} />
                   <p className="mt-2 text-sm font-medium text-gray-600">
@@ -338,6 +385,15 @@ export default function Register() {
                   </p>
                   {formData.photo && (
                     <p className="mt-2 text-xs text-gray-700">Selecionado: {formData.photo.name}</p>
+                  )}
+                  {previewImage && (
+                    <div className="mt-3">
+                      <img
+                        src={previewImage}
+                        alt="Pré-visualização da foto do profissional"
+                        className="h-16 w-16 rounded-full object-cover mx-auto border border-gray-200"
+                      />
+                    </div>
                   )}
                   <input
                     ref={fileInputRef}
@@ -350,6 +406,9 @@ export default function Register() {
                     required
                   />
                 </div>
+                {photoError && (
+                  <p className="text-xs text-red-600">{photoError}</p>
+                )}
                 <p className="text-[12px] text-gray-500">Escolha uma foto clara e convidativa para convencer seus pacientes.</p>
               </div>
 

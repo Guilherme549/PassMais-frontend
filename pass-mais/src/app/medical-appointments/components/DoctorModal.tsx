@@ -28,7 +28,7 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                         <div className="relative w-24 h-24 flex-shrink-0">
                             <Image
                                 fill
-                                src="/doctor.png"
+                                src={doctor.photo ?? "/doctor.png"}
                                 alt="Imagem do médico"
                                 className="rounded-lg object-cover border-2 border-gray-100 w-full h-full"
                             />
