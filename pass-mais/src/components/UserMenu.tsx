@@ -26,10 +26,10 @@ const UserMenu: React.FC = () => {
                     <Calendar size={18} /> Minhas consultas
                 </Link>
 
-                <Link href="/my-profile" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
+                {/*<Link href="/my-profile" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
                     hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200 border-b">
                     <User size={18} /> Meu perfil
-                </Link>
+                </Link> */}
 
                 <Link href="#" className="flex items-center gap-4 px-5 py-4 text-base text-gray-700 
                     hover:bg-blue-50 hover:text-blue-600 transition-colors duration-200">
