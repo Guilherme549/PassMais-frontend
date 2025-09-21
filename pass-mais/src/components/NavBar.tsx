@@ -65,7 +65,7 @@ export default function NavBar() {
                 <div className="md:hidden bg-white shadow-xl w-full absolute top-16 left-0 z-50 
                     animate-slideDown">
                     <div className="flex flex-col items-start gap-6 p-6">
-                        <Link href="#" onClick={toggleMobileMenu}>
+                        <Link href="/minhas-consultas" onClick={toggleMobileMenu}>
                             <span className="text-gray-700 text-lg font-medium hover:text-blue-600 
                                 transition-colors duration-200">
                                 Minhas consultas

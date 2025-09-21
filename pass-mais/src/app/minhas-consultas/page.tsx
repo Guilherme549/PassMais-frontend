@@ -1,5 +1,3 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
 import ClientMyAppointments from "./components/ClientMyAppointments";
 
 interface Appointment {
@@ -12,13 +10,7 @@ interface Appointment {
     status: "agendada" | "realizada" | "cancelada"; // Status da consulta
 }
 
-export default async function MyAppointments() {
-    const session = await getServerSession();
-
-    if (!session) {
-        redirect("/");
-    }
-
+export default function MyAppointments() {
     const appointments: Appointment[] = [
         {
             id: 1,
