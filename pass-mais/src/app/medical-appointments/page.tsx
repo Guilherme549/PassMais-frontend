@@ -79,25 +79,28 @@ export default function MedicalAppointments() {
 }
 
 function normalizeDoctors(data: unknown[]): Doctor[] {
-    return data
-        .map((item) => {
-            const raw = item as Record<string, unknown>;
-            const id = raw?.id != null ? String(raw.id) : "";
-            if (!id) return null;
-            return {
-                id,
-                name: typeof raw.name === "string" ? raw.name : "Nome não informado",
-                specialty: typeof raw.specialty === "string" ? raw.specialty : "Especialidade não informada",
-                crm: typeof raw.crm === "string" ? raw.crm : "CRM não informado",
-                bio: typeof raw.bio === "string" ? raw.bio : "",
-                averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
-                reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
-                photo:
-                    typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
-                        ? raw.photoUrl
-                        : null,
-                address: typeof raw.address === "string" ? raw.address : null,
-            } satisfies Doctor;
-        })
-        .filter((doctor): doctor is Doctor => Boolean(doctor));
+    const normalized: Doctor[] = [];
+
+    for (const item of data) {
+        const raw = item as Record<string, unknown>;
+        const id = raw?.id != null ? String(raw.id) : "";
+        if (!id) continue;
+
+        normalized.push({
+            id,
+            name: typeof raw.name === "string" ? raw.name : "Nome não informado",
+            specialty: typeof raw.specialty === "string" ? raw.specialty : "Especialidade não informada",
+            crm: typeof raw.crm === "string" ? raw.crm : "CRM não informado",
+            bio: typeof raw.bio === "string" ? raw.bio : "",
+            averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
+            reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
+            photo:
+                typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
+                    ? raw.photoUrl
+                    : null,
+            address: typeof raw.address === "string" ? raw.address : null,
+        } satisfies Doctor);
+    }
+
+    return normalized;
 }

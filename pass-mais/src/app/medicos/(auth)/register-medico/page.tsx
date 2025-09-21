@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
@@ -388,9 +389,12 @@ export default function Register() {
                   )}
                   {previewImage && (
                     <div className="mt-3">
-                      <img
+                      <Image
                         src={previewImage}
                         alt="Pré-visualização da foto do profissional"
+                        width={64}
+                        height={64}
+                        unoptimized
                         className="h-16 w-16 rounded-full object-cover mx-auto border border-gray-200"
                       />
                     </div>
