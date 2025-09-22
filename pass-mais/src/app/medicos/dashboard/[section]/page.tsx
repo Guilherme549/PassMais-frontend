@@ -3,6 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+    Bell,
+    CalendarCheck,
+    CalendarClock,
+    CalendarDays,
+    LayoutDashboard,
+    Stethoscope,
+    Star,
+    Users,
+    Wallet,
+    type LucideIcon,
+} from "lucide-react";
 import NavBarDashboardMedico from "../../components/NavBarDashboardMedico";
 import AvaliacoesFeedback from "../avaliacoes-feedback";
 import GerenciarAgendamentos from "../gerenciar-agendamentos";
@@ -13,6 +25,70 @@ import MeusPacientes from "../meus-pacientes";
 import MinhaAgenda from "../minha-agenda";
 import Notificacoes from "../notificacoes";
 import VisaoGeral from "../visao-geral";
+
+type DashboardNavItem = {
+    name: string;
+    path: string;
+    icon: LucideIcon;
+    description: string;
+};
+
+const NAV_ITEMS: DashboardNavItem[] = [
+    {
+        name: "Visão Geral",
+        path: "visao-geral",
+        icon: LayoutDashboard,
+        description: "Resumo do dia e indicadores",
+    },
+    // {
+    //     name: "Minha Agenda",
+    //     path: "minha-agenda",
+    //     icon: CalendarDays,
+    //     description: "Consultas confirmadas",
+    // },
+    // {
+    //     name: "Gerenciar Agendamentos",
+    //     path: "gerenciar-agendamentos",
+    //     icon: CalendarCheck,
+    //     description: "Solicitações e ajustes",
+    // },
+    // {
+    //     name: "Meu Financeiro",
+    //     path: "meu-financeiro",
+    //     icon: Wallet,
+    //     description: "Pagamentos e repasses",
+    // },
+    // {
+    //     name: "Meus Pacientes",
+    //     path: "meus-pacientes",
+    //     icon: Users,
+    //     description: "Histórico e prontuários",
+    // },
+    {
+        name: "Meu Perfil Profissional",
+        path: "meu-perfil-profissional",
+        icon: Stethoscope,
+        description: "Dados pessoais e clínicos",
+    },
+    {
+        name: "Horários",
+        path: "horarios",
+        icon: CalendarClock,
+        description: "Disponibilidades e bloqueios",
+    },
+    // {
+    //     name: "Notificações",
+    //     path: "notificacoes",
+    //     icon: Bell,
+    //     description: "Alertas recentes",
+    // },
+    // {
+    //     name: "Avaliações e Feedback",
+    //     path: "avaliacoes-feedback",
+    //     icon: Star,
+    //     description: "Notas e comentários",
+    // },
+];
 
 // Dados fictícios (substitua por chamadas à API)
 const mockAppointments = [
@@ -66,33 +142,55 @@ export default function MedicoDashboardSection() {
     return (
         <div className="min-h-screen bg-gray-50 flex">
             {/* Sidebar */}
-            <aside className="w-64 bg-white shadow-md fixed h-screen mt-[80px]">
-                <nav className="mt-6">
-                    {[
-                        { name: "Visão Geral", path: "visao-geral" },
-                        { name: "Minha Agenda", path: "minha-agenda" },
-                        { name: "Gerenciar Agendamentos", path: "gerenciar-agendamentos" },
-                        { name: "Meu Financeiro", path: "meu-financeiro" },
-                        { name: "Meus Pacientes", path: "meus-pacientes" },
-                        { name: "Meu Perfil Profissional", path: "meu-perfil-profissional" },
-                        { name: "Horários", path: "horarios" },
-                        { name: "Notificações", path: "notificacoes" },
-                        { name: "Avaliações e Feedback", path: "avaliacoes-feedback" },
-                    ].map((item) => (
-                        <Link
-                            key={item.path}
-                            href={`/medicos/dashboard/${item.path}`} // Usando /medicos/ para corresponder ao diretório
-                            className={`block w-full text-left px-6 py-3 text-gray-700 hover:bg-gray-100 ${activeSection === item.path ? "bg-gray-100 font-semibold" : ""
-                                }`}
-                        >
-                            {item.name}
-                        </Link>
-                    ))}
+            <aside className="fixed mt-[80px] h-screen w-72 bg-white/95 shadow-md backdrop-blur">
+                <nav className="flex h-full flex-col border-r border-gray-100">
+                    <div className="px-6 pb-4 pt-6">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Menu principal</p>
+                    </div>
+                    <ul className="flex-1 space-y-1 px-4 pb-6">
+                        {NAV_ITEMS.map((item) => {
+                            const isActive = activeSection === item.path;
+                            const Icon = item.icon;
+
+                            return (
+                                <li key={item.path}>
+                                    <Link
+                                        href={`/medicos/dashboard/${item.path}`}
+                                        className={`group flex items-center gap-3 rounded-xl px-4 py-3 transition ${
+                                            isActive
+                                                ? "bg-[#5179EF] text-white shadow-sm"
+                                                : "text-gray-600 hover:bg-gray-50"
+                                        }`}
+                                    >
+                                        <span
+                                            className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm transition ${
+                                                isActive
+                                                    ? "border-white/40 bg-white/10 text-white"
+                                                    : "border-gray-200 bg-gray-100 text-gray-500 group-hover:border-gray-300"
+                                            }`}
+                                        >
+                                            <Icon className="h-5 w-5" />
+                                        </span>
+                                        <span className="flex flex-col">
+                                            <span className="text-sm font-semibold leading-snug">{item.name}</span>
+                                            <span
+                                                className={`text-xs leading-tight ${
+                                                    isActive ? "text-white/80" : "text-gray-400"
+                                                }`}
+                                            >
+                                                {item.description}
+                                            </span>
+                                        </span>
+                                    </Link>
+                                </li>
+                            );
+                        })}
+                    </ul>
                 </nav>
             </aside>
 
             {/* Conteúdo Principal */}
-            <div className="flex-1 ml-64">
+            <div className="ml-72 flex-1">  
                 <NavBarDashboardMedico />
 
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 mt-[80px]">
