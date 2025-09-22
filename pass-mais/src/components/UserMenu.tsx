@@ -3,11 +3,21 @@
 import { Calendar, Home, LogOut, User } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { clearTokens } from '@/lib/api';
 
 const UserMenu: React.FC = () => {
     const router = useRouter();
+    const [fullName, setFullName] = useState<string>("Usuário Pass+");
+
+    useEffect(() => {
+        try {
+            const storedName = localStorage.getItem('fullName');
+            if (storedName && storedName.trim().length > 0) {
+                setFullName(storedName);
+            }
+        } catch (_error) {}
+    }, []);
 
     const handleLogout = () => {
         clearTokens();
@@ -24,7 +34,9 @@ const UserMenu: React.FC = () => {
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                     <User className="text-blue-600" size={24} />
                 </div>
-                <p className="text-base font-semibold text-blue-600">Fulano de Tal</p>
+                <p className="text-base font-semibold text-blue-600" title={fullName}>
+                    {fullName}
+                </p>
             </div>
 
             {/* Links */}
