@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarClock, Repeat, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const DEFAULT_SPECIFIC_SETTINGS = {
@@ -45,6 +46,26 @@ type RecurringDaySchedule = {
 };
 
 type Mode = "specific" | "recurring";
+
+const MODE_OPTIONS: Array<{
+    key: Mode;
+    label: string;
+    description: string;
+    icon: LucideIcon;
+}> = [
+    {
+        key: "specific",
+        label: "Horários específicos",
+        description: "Datas pontuais com personalização",
+        icon: CalendarClock,
+    },
+    {
+        key: "recurring",
+        label: "Horários recorrentes",
+        description: "Regras semanais automáticas",
+        icon: Repeat,
+    },
+];
 
 const DEFAULT_RECURRING_SCHEDULE: Record<Weekday, RecurringDaySchedule> = {
     "Segunda-feira": { enabled: true, slots: [{ id: createId(), start: "08:00", end: "17:00" }] },
@@ -531,26 +552,47 @@ export default function Horarios() {
                 </p>
             </div>
 
-            <div className="inline-flex rounded-full bg-gray-100 p-1 text-xs font-medium">
-                <button
-                    type="button"
-                    onClick={() => modeChange("specific")}
-                    className={`px-4 py-2 rounded-full transition ${
-                        mode === "specific" ? "bg-white text-gray-900 shadow" : "text-gray-500"
-                    }`}
-                >
-                    Horários específicos
-                </button>
-                <button
-                    type="button"
-                    onClick={() => modeChange("recurring")}
-                    className={`px-4 py-2 rounded-full transition ${
-                        mode === "recurring" ? "bg-white text-gray-900 shadow" : "text-gray-500"
-                    }`}
-                >
-                    Horários recorrentes
-                </button>
-            </div>
+            <nav
+                aria-label="Alternar modo de configuração"
+                className="rounded-2xl border border-gray-200 bg-white p-1 shadow-sm"
+            >
+                <ul className="grid gap-1 sm:grid-cols-2">
+                    {MODE_OPTIONS.map((option) => {
+                        const isActive = mode === option.key;
+                        const Icon = option.icon;
+
+                        return (
+                            <li key={option.key}>
+                                <button
+                                    type="button"
+                                    onClick={() => modeChange(option.key)}
+                                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition ${
+                                        isActive
+                                            ? "bg-gray-900 text-white shadow-sm"
+                                            : "text-gray-600 hover:bg-gray-50"
+                                    }`}
+                                >
+                                    <span
+                                        className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm ${
+                                            isActive
+                                                ? "border-white/40 bg-white/10 text-white"
+                                                : "border-gray-200 bg-gray-100 text-gray-500"
+                                        }`}
+                                    >
+                                        <Icon className="h-5 w-5" />
+                                    </span>
+                                    <span className="flex flex-col gap-0.5">
+                                        <span className="text-sm font-semibold">{option.label}</span>
+                                        <span className={`text-xs ${isActive ? "text-white/80" : "text-gray-500"}`}>
+                                            {option.description}
+                                        </span>
+                                    </span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </nav>
 
             {mode === "specific" ? (
                 <div className="space-y-6">
