@@ -8,6 +8,7 @@ import AvaliacoesFeedback from "../avaliacoes-feedback";
 import GerenciarAgendamentos from "../gerenciar-agendamentos";
 import MeuFinanceiro from "../meu-financeiro";
 import MeuPerfilProfissional from "../meu-perfil-profissional";
+import Horarios from "../horarios";
 import MeusPacientes from "../meus-pacientes";
 import MinhaAgenda from "../minha-agenda";
 import Notificacoes from "../notificacoes";
@@ -57,7 +58,7 @@ export default function MedicoDashboardSection() {
     useEffect(() => {
         const section = pathname.split("/").pop() || "visao-geral";
         setActiveSection(section);
-        if (!["visao-geral", "minha-agenda", "gerenciar-agendamentos", "meu-financeiro", "meus-pacientes", "meu-perfil-profissional", "notificacoes", "avaliacoes-feedback"].includes(section)) {
+        if (!["visao-geral", "minha-agenda", "gerenciar-agendamentos", "meu-financeiro", "meus-pacientes", "meu-perfil-profissional", "horarios", "notificacoes", "avaliacoes-feedback"].includes(section)) {
             router.push("/medicos/dashboard/visao-geral");
         }
     }, [pathname, router]);
@@ -74,6 +75,7 @@ export default function MedicoDashboardSection() {
                         { name: "Meu Financeiro", path: "meu-financeiro" },
                         { name: "Meus Pacientes", path: "meus-pacientes" },
                         { name: "Meu Perfil Profissional", path: "meu-perfil-profissional" },
+                        { name: "Horários", path: "horarios" },
                         { name: "Notificações", path: "notificacoes" },
                         { name: "Avaliações e Feedback", path: "avaliacoes-feedback" },
                     ].map((item) => (
@@ -100,6 +102,7 @@ export default function MedicoDashboardSection() {
                     {activeSection === "meu-financeiro" && <MeuFinanceiro financials={mockFinancials} />}
                     {activeSection === "meus-pacientes" && <MeusPacientes patients={mockPatients} />}
                     {activeSection === "meu-perfil-profissional" && <MeuPerfilProfissional />}
+                    {activeSection === "horarios" && <Horarios />}
                     {activeSection === "notificacoes" && <Notificacoes notifications={mockNotifications} />}
                     {activeSection === "avaliacoes-feedback" && <AvaliacoesFeedback reviews={mockReviews} />}
                 </div>
