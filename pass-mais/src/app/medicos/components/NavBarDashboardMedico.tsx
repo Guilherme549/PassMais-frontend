@@ -2,19 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { clearTokens } from "@/lib/api";
 
 export default function NavBarDashboardMedico() {
     const router = useRouter();
 
     const handleLogout = () => {
-        try {
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-            }
-        } finally {
-            router.push("/medicos/login-medico");
-        }
+        clearTokens();
+        try { localStorage.removeItem("fullName"); } catch {}
+        try { document.cookie = "role=; Max-Age=0; path=/"; } catch {}
+        router.push("/medicos/login-medico");
     };
 
     return (
