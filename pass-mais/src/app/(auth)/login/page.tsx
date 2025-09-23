@@ -31,7 +31,7 @@ export default function Login() {
           <div className="mt-8 rounded-lg bg-gray-50 border border-gray-100 p-4 text-sm text-gray-500">
             <p className="font-medium text-gray-600">Dicas rápidas</p>
             <ul className="mt-2 space-y-1 list-disc list-inside">
-              <li>Use o e-mail cadastrado durante o registro.</li>
+              <li>Use o e-mail cadastrado que foi colocado durante a criação da conta.</li>
               <li>Se esquecer a senha, clique em "Esqueceu a senha?" para recuperar.</li>
             </ul>
           </div>
