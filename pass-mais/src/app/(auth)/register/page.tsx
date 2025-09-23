@@ -81,7 +81,7 @@ export default function Register() {
             console.log(data)
             setSuccess("Usuário criado com sucesso!");
             setTimeout(() => {
-                router.push("/");
+                router.push("/login");
             }, 2000);
         } catch (err: unknown) {
             let errorMessage = "Ocorreu um erro. Tente novamente.";
