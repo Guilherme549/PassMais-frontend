@@ -162,6 +162,10 @@ export default function ClientMedicalAppointments({
       {selectedDoctor && (
         <DoctorModal doctor={selectedDoctor} onClose={handleCloseModal} />
       )}
+      <footer className="m-[10px] h-[100px] flex flex-col items-center justify-center text-center text-gray-400 text-xs">
+        © Pass+ {new Date().getFullYear()} Todos os direitos reservados.
+        <span>www.passmais.com.br</span>
+      </footer>
     </div>
   );
 }
