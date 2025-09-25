@@ -10,6 +10,12 @@ interface DoctorModalProps {
     onClose: () => void;
 }
 
+const joinAddressParts = (...parts: Array<string | null | undefined>) =>
+    parts
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value) => value.length > 0)
+        .join(", ");
+
 export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
     if (!doctor) return null;
 
@@ -44,10 +50,19 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                             <h3 className="text-lg font-semibold text-gray-900">Sobre</h3>
                             <p className="text-gray-600 whitespace-pre-line">{doctor.bio || "Biografia não informada."}</p>
                         </div>
-                        {doctor.address && (
+                        {(doctor.clinicName || doctor.clinicStreetAndNumber || doctor.clinicCity || doctor.clinicPostalCode || doctor.address) && (
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">Endereço</h3>
-                                <p className="text-gray-600">{doctor.address}</p>
+                                <h3 className="text-lg font-semibold text-gray-900">Local de atendimento</h3>
+                                <div className="text-gray-600 space-y-1">
+                                    {doctor.clinicName && <p>{doctor.clinicName}</p>}
+                                    {(doctor.clinicStreetAndNumber || doctor.clinicCity) && (
+                                        <p>{joinAddressParts(doctor.clinicStreetAndNumber, doctor.clinicCity)}</p>
+                                    )}
+                                    {doctor.clinicPostalCode && <p>CEP: {doctor.clinicPostalCode}</p>}
+                                    {!doctor.clinicName && !doctor.clinicStreetAndNumber && !doctor.clinicCity && doctor.address && (
+                                        <p>{doctor.address}</p>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
