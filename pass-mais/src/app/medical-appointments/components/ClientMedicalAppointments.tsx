@@ -15,6 +15,12 @@ interface DoctorCardProps {
   onCardClick?: (doctor: Doctor) => void; // Adicionando a prop onCardClick como opcional
 }
 
+const joinAddressParts = (...parts: Array<string | null | undefined>) =>
+  parts
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0)
+    .join(", ");
+
 function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
   // Função para lidar com o clique no card
   const handleCardClick = () => {
@@ -61,6 +67,20 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
                 {doctor.bio || "Biografia não informada."}
               </p>
             </div>
+            {(doctor.clinicName || doctor.clinicStreetAndNumber || doctor.clinicCity || doctor.clinicPostalCode) && (
+              <div className="pt-2 text-gray-600">
+                <span className="text-lg font-semibold text-gray-900 block">Local de atendimento:</span>
+                <div className="mt-1 space-y-1">
+                  {doctor.clinicName && <p className="text-lg">{doctor.clinicName}</p>}
+                  {(doctor.clinicStreetAndNumber || doctor.clinicCity) && (
+                    <p className="text-lg">{joinAddressParts(doctor.clinicStreetAndNumber, doctor.clinicCity)}</p>
+                  )}
+                  {doctor.clinicPostalCode && (
+                    <p className="text-sm text-gray-500">CEP: {doctor.clinicPostalCode}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-end mt-6 sm:mt-0">
@@ -122,9 +142,14 @@ export default function ClientMedicalAppointments({
       const matchesSpecialty =
         specialty === "" ||
         doctor.specialty.toLowerCase().includes(specialty.toLowerCase());
-      const matchesCity =
-        city === "" ||
-        (doctor.address ?? "").toLowerCase().includes(city.toLowerCase());
+      const matchesCity = (() => {
+        if (city === "") return true;
+        const searchableValues = [
+          doctor.clinicCity,
+          doctor.address,
+        ].filter((value): value is string => Boolean(value && value.length > 0));
+        return searchableValues.some((value) => value.toLowerCase().includes(city.toLowerCase()));
+      })();
       return matchesSpecialty && matchesCity;
     });
 
