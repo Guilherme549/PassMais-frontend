@@ -18,10 +18,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <nav className="flex-1 p-4 space-y-1 text-[15px]">
           <NavItem href="/admin/painel" icon={<MdDashboard size={18} />}>Dashboard</NavItem>
           <NavItem href="/admin/aprovacoes" icon={<MdAssignment size={18} />}>Aprovações de Cadastros</NavItem>
-          <NavItem href="/admin/moderacao" icon={<MdRateReview size={18} />}>Moderação de Avaliações</NavItem>
+          {/* <NavItem href="/admin/moderacao" icon={<MdRateReview size={18} />}>Moderação de Avaliações</NavItem>
           <NavItem href="/admin/filas" icon={<MdQueue size={18} />}>Filas de Atendimento</NavItem>
           <NavItem href="/admin/logs" icon={<MdDescription size={18} />}>Logs de Auditoria</NavItem>
-          <NavItem href="/admin/administradores" icon={<MdGroup size={18} />}>Gerenciar Administradores</NavItem>
+          <NavItem href="/admin/administradores" icon={<MdGroup size={18} />}>Gerenciar Administradores</NavItem> */}
         </nav>
         <div className="px-4 py-3 text-xs text-gray-400">
           {isAdmin ? "Administrador" : "Acesso restrito"}
