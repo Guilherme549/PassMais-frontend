@@ -22,6 +22,8 @@ interface ClientDoctorProfileProps {
     doctor: Doctor;
 }
 
+const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
     parts
         .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -89,7 +91,7 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
                         <div className="flex flex-col sm:flex-row gap-6 mb-4">
                             <div className="relative w-32 h-32 flex-shrink-0">
                                 <Image
-                                    src={doctor.photo ?? "/doctor.png"}
+                                    src={doctor.photo ?? DOCTOR_AVATAR_PLACEHOLDER}
                                     alt={`Foto de ${doctor.name}`}
                                     fill
                                     className="rounded-xl object-cover border-4 border-gray-100"

@@ -1,5 +1,7 @@
 import type { Doctor } from "./types";
 
+const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+
 export const fallbackDoctors: Doctor[] = [
     {
         id: "1",
@@ -9,7 +11,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Profissional especializado em cirurgias minimamente invasivas, com foco em atendimento humanizado e seguro.",
         averageRating: 4.5,
         reviewsCount: 127,
-        photo: "/doctor.png",
+        photo: DOCTOR_AVATAR_PLACEHOLDER,
         address: "Clínica Bem-Estar - R. Ana Luiza Souza, Qd. 24 - Lt. 288, Anápolis - GO, 75110-030",
         clinicName: "Clínica Bem-Estar",
         clinicStreetAndNumber: "R. Ana Luiza Souza, Qd. 24 - Lt. 288",
@@ -25,7 +27,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Cardiologista com experiência em prevenção e tratamento de doenças cardiovasculares, atuando com tecnologia de ponta.",
         averageRating: 4.7,
         reviewsCount: 95,
-        photo: "/doctor.png",
+        photo: DOCTOR_AVATAR_PLACEHOLDER,
         address: "Clínica Coração Saudável - Av. Brasil, 100 - Centro, Goiânia - GO, 74000-000",
         clinicName: "Clínica Coração Saudável",
         clinicStreetAndNumber: "Av. Brasil, 100 - Centro",
@@ -41,7 +43,7 @@ export const fallbackDoctors: Doctor[] = [
         bio: "Dermatologista dedicada a tratamentos estéticos e clínicos, com foco em resultados personalizados e cuidados contínuos.",
         averageRating: 4.8,
         reviewsCount: 150,
-        photo: "/doctor.png",
+        photo: DOCTOR_AVATAR_PLACEHOLDER,
         address: "Clínica Pele & Saúde - Rua 10, 500 - Setor Oeste, Goiânia - GO, 74120-020",
         clinicName: "Clínica Pele & Saúde",
         clinicStreetAndNumber: "Rua 10, 500 - Setor Oeste",

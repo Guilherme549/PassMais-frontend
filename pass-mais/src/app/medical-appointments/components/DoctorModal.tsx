@@ -10,6 +10,8 @@ interface DoctorModalProps {
     onClose: () => void;
 }
 
+const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
     parts
         .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -34,7 +36,7 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                         <div className="relative w-24 h-24 flex-shrink-0">
                             <Image
                                 fill
-                                src={doctor.photo ?? "/doctor.png"}
+                                src={doctor.photo ?? DOCTOR_AVATAR_PLACEHOLDER}
                                 alt="Imagem do médico"
                                 className="rounded-lg object-cover border-2 border-gray-100 w-full h-full"
                             />

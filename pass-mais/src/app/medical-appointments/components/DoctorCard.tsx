@@ -20,6 +20,8 @@ interface DoctorModalProps {
     onClose: () => void;
 }
 
+const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+
 function DoctorModal({ doctor, onClose }: DoctorModalProps) {
     if (!doctor) return null;
 
@@ -38,7 +40,7 @@ function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                         <div className="relative w-24 h-24 flex-shrink-0">
                             <Image
                                 fill
-                                src="/doctor.png"
+                                src={DOCTOR_AVATAR_PLACEHOLDER}
                                 alt="Imagem do médico"
                                 className="rounded-lg object-cover border-2 border-gray-100 w-full h-full"
                             />
@@ -167,7 +169,7 @@ export default function DoctorCard({ doctor }: { doctor: Doctor }) {
                         <div className="relative w-48 h-48 flex-shrink-0">
                             <Image
                                 fill
-                                src="/doctor.png"
+                                src={DOCTOR_AVATAR_PLACEHOLDER}
                                 alt="Imagem do médico"
                                 className="rounded-lg object-cover border-4 border-gray-100"
                             />

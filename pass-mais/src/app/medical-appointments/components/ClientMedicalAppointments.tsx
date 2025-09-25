@@ -15,6 +15,8 @@ interface DoctorCardProps {
   onCardClick?: (doctor: Doctor) => void; // Adicionando a prop onCardClick como opcional
 }
 
+const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
   parts
     .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -51,7 +53,7 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="relative w-48 h-48 flex-shrink-0">
             <Image
-              src={doctor.photo ?? "/doctor.png"}
+              src={doctor.photo ?? DOCTOR_AVATAR_PLACEHOLDER}
               alt="Imagem do médico"
               width={192} // Ajuste conforme necessário
               height={192} // Ajuste conforme necessário
