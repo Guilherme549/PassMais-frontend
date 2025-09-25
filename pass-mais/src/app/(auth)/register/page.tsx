@@ -8,6 +8,25 @@ import { useState } from "react";
 import { FaCheckCircle } from "react-icons/fa";
 import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
+const NAME_REGEX = /^[A-Za-zÀ-ÿ'`\-\s]{3,100}$/;
+const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
+const PHONE_REGEX = /^\(\d{2}\) \d{5}-\d{4}$/;
+
+const MIN_PASSWORD_LENGTH = 6;
+
+function onlyDigits(value: string) {
+    return value.replace(/\D+/g, "");
+}
+
+function formatPhone(value: string) {
+    const digits = onlyDigits(value).slice(0, 11);
+    if (digits.length < 3) return digits;
+    if (digits.length <= 7) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export default function Register() {
     const router = useRouter();
     const [showPassword, setShowPassword] = useState(false);
@@ -20,39 +39,91 @@ export default function Register() {
         phone: "",
         acceptTerms: false,
     });
-    const [error, setError] = useState("");
+    const [errors, setErrors] = useState<string[]>([]);
     const [success, setSuccess] = useState("");
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
+        setErrors([]);
+
+        if (type === "checkbox") {
+            setFormData((prev) => ({ ...prev, [name]: checked }));
+            return;
+        }
+
+        let nextValue = value;
+        if (name === "phone") {
+            nextValue = formatPhone(value);
+        }
+
         setFormData((prev) => ({
             ...prev,
-            [name]: type === "checkbox" ? checked : value,
+            [name]: nextValue,
         }));
+    };
+
+    const passwordIsStrong = (password: string) => {
+        return password.length >= MIN_PASSWORD_LENGTH;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError("");
+        setErrors([]);
         setSuccess("");
 
-        if (formData.password !== formData.confirmPassword) {
-            setError("As senhas não coincidem");
-            return;
+        const validationErrors: string[] = [];
+        const fullName = formData.fullName.trim();
+        const email = formData.email.trim();
+        const phone = formData.phone.trim();
+        const password = formData.password;
+        const confirmPassword = formData.confirmPassword;
+
+        if (!fullName) {
+            validationErrors.push("Informe seu nome completo.");
+        } else if (!NAME_REGEX.test(fullName)) {
+            validationErrors.push("O nome deve conter apenas letras e espaços.");
+        }
+
+        if (!email) {
+            validationErrors.push("Informe um e-mail válido.");
+        } else if (!EMAIL_REGEX.test(email)) {
+            validationErrors.push("Formato de e-mail inválido.");
+        }
+
+        if (!phone) {
+            validationErrors.push("Informe um telefone para contato.");
+        } else if (!PHONE_REGEX.test(phone)) {
+            validationErrors.push("Telefone deve seguir o formato (11) 91234-5678.");
+        }
+
+        if (!password) {
+            validationErrors.push("Informe uma senha.");
+        } else if (!passwordIsStrong(password)) {
+            validationErrors.push("A senha deve ter no mínimo 6 caracteres.");
+        }
+
+        if (!confirmPassword) {
+            validationErrors.push("Confirme a senha.");
+        } else if (password !== confirmPassword) {
+            validationErrors.push("As senhas devem ser iguais.");
         }
 
         if (!formData.acceptTerms) {
-            setError("Você deve aceitar os termos e condições");
+            validationErrors.push("É necessário aceitar os termos e condições.");
+        }
+
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
             return;
         }
 
         const userData = {
-            name: formData.fullName,
-            email: formData.email,
-            password: formData.password,
+            name: fullName,
+            email,
+            password,
             role: "PATIENT",
             lgpdAccepted: formData.acceptTerms === true,
-            phone: formData.phone,
+            phone: onlyDigits(phone),
         };
 
         try {
@@ -86,12 +157,11 @@ export default function Register() {
         } catch (err: unknown) {
             let errorMessage = "Ocorreu um erro. Tente novamente.";
             if (err instanceof Error) {
-                errorMessage =
-                    err.message.includes("Failed to fetch")
-                        ? "Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde."
-                        : err.message;
+                errorMessage = err.message.includes("Failed to fetch")
+                    ? "Não foi possível conectar ao servidor. Verifique sua conexão ou tente novamente mais tarde."
+                    : err.message;
             }
-            setError(errorMessage);
+            setErrors([errorMessage]);
             console.error("Erro na requisição:", err);
         }
     };
@@ -105,13 +175,22 @@ export default function Register() {
                         <h2 className="text-2xl font-semibold mb-[24px] text-center">
                             Criar uma conta
                         </h2>
+                        {errors.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
+                                <p className="font-semibold">Por favor, corrija os seguintes pontos:</p>
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                    {errors.map((msg) => (
+                                        <li key={msg}>{msg}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         {success && (
                             <div className="flex items-center justify-center bg-green-100 text-green-800 text-base font-semibold p-4 mb-4 rounded-lg shadow-md animate-fade-in">
                                 <FaCheckCircle className="mr-2 text-green-600" size={20} />
                                 {success}
                             </div>
                         )}
-                        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
                         <form onSubmit={handleSubmit}>
                             <div>
                                 <label htmlFor="fullName" className="block text-sm pl-[16px] pb-[8px]">
