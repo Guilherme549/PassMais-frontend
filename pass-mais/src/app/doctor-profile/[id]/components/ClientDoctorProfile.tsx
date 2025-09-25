@@ -22,6 +22,12 @@ interface ClientDoctorProfileProps {
     doctor: Doctor;
 }
 
+const joinAddressParts = (...parts: Array<string | null | undefined>) =>
+    parts
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value) => value.length > 0)
+        .join(", ");
+
 export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps) {
     const router = useRouter();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -101,7 +107,21 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
                                 </div>
                             </div>
                         </div>
-                        <p className="text-gray-600 mb-2">{doctor.address}</p>
+                        {(doctor.clinicName || doctor.clinicStreetAndNumber || doctor.clinicCity || doctor.address) && (
+                            <div className="text-gray-600 mb-2">
+                                <p className="font-semibold text-gray-700">Local de atendimento</p>
+                                <div className="space-y-1">
+                                    {doctor.clinicName && <p>{doctor.clinicName}</p>}
+                                    {(doctor.clinicStreetAndNumber || doctor.clinicCity) && (
+                                        <p>{joinAddressParts(doctor.clinicStreetAndNumber, doctor.clinicCity)}</p>
+                                    )}
+                                    {doctor.clinicPostalCode && <p>CEP: {doctor.clinicPostalCode}</p>}
+                                    {!doctor.clinicName && !doctor.clinicStreetAndNumber && !doctor.clinicCity && doctor.address && (
+                                        <p>{doctor.address}</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <p className="text-gray-600 mb-4">{doctor.bio || "Biografia não informada."}</p>
                         <p className="text-gray-600 font-semibold">
                             Valor da consulta: {formatCurrency(doctor.consultationFee ?? 0)}

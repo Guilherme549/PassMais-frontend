@@ -8,4 +8,9 @@ export interface Doctor {
     reviewsCount: number;
     photo: string | null;
     address?: string | null;
+    clinicName?: string | null;
+    clinicStreetAndNumber?: string | null;
+    clinicCity?: string | null;
+    clinicPostalCode?: string | null;
+    consultationPrice?: number | null;
 }

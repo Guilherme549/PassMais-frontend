@@ -98,7 +98,50 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
                     ? raw.photoUrl
                     : null,
-            address: typeof raw.address === "string" ? raw.address : null,
+            clinicName:
+                typeof raw.clinicName === "string" && raw.clinicName.trim().length > 0
+                    ? raw.clinicName
+                    : null,
+            clinicStreetAndNumber:
+                typeof raw.clinicStreetAndNumber === "string" && raw.clinicStreetAndNumber.trim().length > 0
+                    ? raw.clinicStreetAndNumber
+                    : null,
+            clinicCity:
+                typeof raw.clinicCity === "string" && raw.clinicCity.trim().length > 0
+                    ? raw.clinicCity
+                    : null,
+            clinicPostalCode:
+                typeof raw.clinicPostalCode === "string" && raw.clinicPostalCode.trim().length > 0
+                    ? raw.clinicPostalCode
+                    : null,
+            consultationPrice:
+                typeof raw.consultationPrice === "number" ? raw.consultationPrice : null,
+            address: (() => {
+                const legacy =
+                    typeof raw.address === "string" && raw.address.trim().length > 0
+                        ? raw.address
+                        : null;
+                if (legacy) return legacy;
+
+                const composedAddress = [
+                    typeof raw.clinicStreetAndNumber === "string"
+                        ? raw.clinicStreetAndNumber.trim()
+                        : "",
+                    typeof raw.clinicCity === "string" ? raw.clinicCity.trim() : "",
+                    typeof raw.clinicPostalCode === "string" ? raw.clinicPostalCode.trim() : "",
+                ]
+                    .filter((value) => value.length > 0)
+                    .join(", ");
+
+                const composed = [
+                    typeof raw.clinicName === "string" ? raw.clinicName.trim() : "",
+                    composedAddress,
+                ]
+                    .filter((value) => value.length > 0)
+                    .join(" - ");
+
+                return composed.length > 0 ? composed : null;
+            })(),
         } satisfies Doctor);
     }
 
