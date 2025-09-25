@@ -34,6 +34,10 @@ type DoctorProfile = {
   birthDate: string | null; // YYYY-MM-DD
   photoUrl: string | null;
   consultationPrice: number | null;
+  clinicName: string | null;
+  clinicStreetAndNumber: string | null;
+  clinicCity: string | null;
+  clinicPostalCode: string | null;
   approved: boolean;
   approvedAt: string | null; // ISO
   createdAt: string; // ISO
@@ -355,8 +359,8 @@ function DoctorDetailModal({ doctor, loading, error, onClose }: { doctor: Doctor
           )}
           {!loading && !error && doctor && (
             <div className="space-y-5">
-              <div className="flex gap-5 items-start">
-                <div className="w-28 h-28 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0">
+              <div className="flex flex-col gap-4 sm:flex-row sm:gap-5 items-center sm:items-start">
+                <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0">
                   {photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={photo} alt={`Foto de ${doctor.userName}`} className="w-full h-full object-cover" />
@@ -364,19 +368,23 @@ function DoctorDetailModal({ doctor, loading, error, onClose }: { doctor: Doctor
                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sem foto</div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <div className="text-xl font-semibold text-gray-900">{doctor.userName}</div>
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="text-lg sm:text-xl font-semibold text-gray-900">{doctor.userName}</div>
                   <div className="text-gray-600">{doctor.specialty || '-'}</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                 <Info label="E-mail" value={doctor.userEmail} />
                 <Info label="CRM" value={doctor.crm} />
                 <Info label="Telefone" value={doctor.phone} />
                 <Info label="CPF" value={doctor.cpf} />
                 <Info label="Nascimento" value={doctor.birthDate ? formatDate(doctor.birthDate) : undefined} />
                 <Info label="Preço da Consulta" value={doctor.consultationPrice != null ? `R$ ${Number(doctor.consultationPrice).toFixed(2)}` : undefined} />
+                <Info label="Clínica" value={doctor.clinicName} />
+                <Info label="Rua e número" value={doctor.clinicStreetAndNumber} />
+                <Info label="Cidade" value={doctor.clinicCity} />
+                <Info label="CEP" value={doctor.clinicPostalCode} />
                 <Info label="Status de Aprovação" value={doctor.approved ? 'Aprovado' : 'Pendente'} />
                 <Info label="Aprovado em" value={doctor.approvedAt ? formatDate(doctor.approvedAt) : '-'} />
                 <Info label="Criado em" value={doctor.createdAt ? formatDate(doctor.createdAt) : '-'} />
