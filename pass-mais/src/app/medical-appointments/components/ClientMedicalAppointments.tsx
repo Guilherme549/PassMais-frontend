@@ -17,11 +17,120 @@ interface DoctorCardProps {
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
 
+type DoctorLocation = {
+  city: string | null;
+  state: string | null;
+  address: string | null;
+};
+
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
   parts
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter((value) => value.length > 0)
     .join(", ");
+
+const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+
+function normalizeForSearch(value: string | null | undefined) {
+  if (!value) return "";
+  return value
+    .normalize("NFD")
+    .replace(DIACRITICS_REGEX, "")
+    .toLowerCase()
+    .trim();
+}
+
+function parseCityStateFromText(value: string | null | undefined) {
+  if (!value) return { city: null as string | null, state: null as string | null };
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return { city: null, state: null };
+
+  const hyphenRegex = /([A-Za-zÀ-ÖØ-öø-ÿ\s'´-]+?)\s*-\s*([A-Za-z]{2})(?:\s*,|\s*$)/g;
+  const hyphenMatches = Array.from(trimmed.matchAll(hyphenRegex));
+  if (hyphenMatches.length > 0) {
+    const lastMatch = hyphenMatches[hyphenMatches.length - 1];
+    const city = lastMatch?.[1]?.trim() ?? null;
+    const state = lastMatch?.[2]?.trim().toUpperCase() ?? null;
+    if (city && state) return { city, state };
+  }
+
+  const commaRegex = /([A-Za-zÀ-ÖØ-öø-ÿ\s'´-]+?),\s*([A-Za-z]{2})(?:\s*,|\s*$)/g;
+  const commaMatches = Array.from(trimmed.matchAll(commaRegex));
+  if (commaMatches.length > 0) {
+    const lastMatch = commaMatches[commaMatches.length - 1];
+    const city = lastMatch?.[1]?.trim() ?? null;
+    const state = lastMatch?.[2]?.trim().toUpperCase() ?? null;
+    if (city && state) return { city, state };
+  }
+
+  return { city: trimmed.length > 0 ? trimmed : null, state: null };
+}
+
+function getDoctorLocations(doctor: Doctor): DoctorLocation[] {
+  const explicitLocations: DoctorLocation[] = (doctor.serviceLocations ?? []).map((location) => ({
+    city: location?.city ?? null,
+    state: location?.state ?? null,
+    address: location?.address ?? null,
+  }));
+
+  if (explicitLocations.length > 0) {
+    return explicitLocations.map((location) => {
+      if (location.city && location.state) return location;
+
+      const fallback = parseCityStateFromText(
+        joinAddressParts(location.address ?? undefined, doctor.clinicCity, doctor.clinicState)
+      );
+
+      return {
+        city: location.city ?? fallback.city ?? doctor.clinicCity ?? null,
+        state: location.state ?? fallback.state ?? doctor.clinicState ?? null,
+        address: location.address ?? doctor.address ?? null,
+      };
+    });
+  }
+
+  const fallback = parseCityStateFromText(doctor.address ?? doctor.clinicCity ?? undefined);
+
+  const mergedCity = doctor.clinicCity ?? fallback.city;
+  const mergedState = doctor.clinicState ?? fallback.state;
+
+  if (!mergedCity && !mergedState) return [];
+
+  return [
+    {
+      city: mergedCity,
+      state: mergedState,
+      address: doctor.address ?? joinAddressParts(doctor.clinicStreetAndNumber, doctor.clinicCity, doctor.clinicState),
+    },
+  ];
+}
+
+function matchesAddressFallback(doctor: Doctor, normalizedCity: string, normalizedState: string) {
+  if (normalizedCity.length === 0 && normalizedState.length === 0) return true;
+
+  const possibleValues = [
+    doctor.address,
+    joinAddressParts(doctor.clinicStreetAndNumber, doctor.clinicCity, doctor.clinicState),
+    doctor.clinicCity,
+    doctor.clinicState,
+  ];
+
+  return possibleValues.some((value) => {
+    const normalizedValue = normalizeForSearch(value);
+    if (normalizedValue.length === 0) return false;
+
+    const cityMatches =
+      normalizedCity.length === 0 ||
+      normalizedValue.includes(normalizedCity);
+
+    const stateMatches =
+      normalizedState.length === 0 ||
+      normalizedValue.includes(normalizedState);
+
+    return cityMatches && stateMatches;
+  });
+}
 
 function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
   // Função para lidar com o clique no card
@@ -131,8 +240,19 @@ export default function ClientMedicalAppointments({
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const specialty = formData.get("medical-specialty")?.toString() || "";
-    const city = formData.get("city-region")?.toString() || "";
+    const specialtyInput = formData.get("medical-specialty")?.toString().trim() || "";
+    const cityRegionInput = formData.get("city-region")?.toString().trim() || "";
+    const explicitCity = formData.get("city")?.toString().trim() || "";
+    const explicitState = formData.get("state")?.toString().trim() || "";
+
+    const parsedFromCityRegion = parseCityStateFromText(cityRegionInput);
+    const desiredCity = explicitCity || parsedFromCityRegion.city || "";
+    const desiredState = explicitState || parsedFromCityRegion.state || "";
+
+    const normalizedCity = normalizeForSearch(desiredCity);
+    const normalizedState = normalizeForSearch(desiredState);
+    const normalizedSpecialty = normalizeForSearch(specialtyInput);
+    const hasLocationFilter = normalizedCity.length > 0 || normalizedState.length > 0;
 
     if (!loadedDoctors) {
       setFilteredDoctors(null);
@@ -141,18 +261,35 @@ export default function ClientMedicalAppointments({
 
     // Filtra os médicos com base nos campos de especialidade e cidade
     const filtered = loadedDoctors.filter((doctor) => {
+      const doctorSpecialty = normalizeForSearch(doctor.specialty);
       const matchesSpecialty =
-        specialty === "" ||
-        doctor.specialty.toLowerCase().includes(specialty.toLowerCase());
-      const matchesCity = (() => {
-        if (city === "") return true;
-        const searchableValues = [
-          doctor.clinicCity,
-          doctor.address,
-        ].filter((value): value is string => Boolean(value && value.length > 0));
-        return searchableValues.some((value) => value.toLowerCase().includes(city.toLowerCase()));
-      })();
-      return matchesSpecialty && matchesCity;
+        normalizedSpecialty.length === 0 ||
+        doctorSpecialty.includes(normalizedSpecialty);
+
+      if (!matchesSpecialty) return false;
+
+      if (!hasLocationFilter) return true;
+
+      const locations = getDoctorLocations(doctor);
+      const locationMatches = locations.some((location) => {
+        const locationCity = normalizeForSearch(location.city);
+        const locationState = normalizeForSearch(location.state);
+
+        const cityMatches =
+          normalizedCity.length === 0 ||
+          (locationCity.length > 0 && locationCity.includes(normalizedCity));
+
+        const stateMatches =
+          normalizedState.length === 0 ||
+          (locationState.length > 0 &&
+            (locationState === normalizedState || locationState.includes(normalizedState)));
+
+        return cityMatches && stateMatches;
+      });
+
+      if (locationMatches) return true;
+
+      return matchesAddressFallback(doctor, normalizedCity, normalizedState);
     });
 
     setFilteredDoctors(filtered);
