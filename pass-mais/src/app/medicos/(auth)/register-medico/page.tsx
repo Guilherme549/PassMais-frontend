@@ -19,29 +19,45 @@ const SPECIALTY_REGEX = /^[A-Za-zÀ-ÿ\s]+$/;
 const CEP_REGEX = /^\d{5}-\d{3}$/;
 
 const SPECIALTIES = [
-  "Clínica Geral",
-  "Cardiologia",
-  "Pediatria",
-  "Dermatologia",
-  "Ginecologia",
-  "Obstetrícia",
-  "Ortopedia",
-  "Neurologia",
-  "Psiquiatria",
-  "Endocrinologia",
-  "Gastroenterologia",
-  "Nefrologia",
-  "Pneumologia",
-  "Oncologia",
-  "Reumatologia",
-  "Oftalmologia",
-  "Otorrinolaringologia",
-  "Urologia",
-  "Anestesiologia",
-  "Hematologia",
-  "Infectologia",
-  "Nutrologia",
-  "Medicina de Família e Comunidade",
+  "Clínico Geral",
+  "Ginecologista",
+  "Psiquiatra",
+  "Psicólogo",
+  "Ortopedista",
+  "Dermatologista",
+  "Pediatra",
+  "Endocrinologista",
+  "Cardiologista",
+  "Neurologista",
+  "Oftalmologista",
+  "Nutricionista",
+  "Fisioterapeuta",
+  "Reumatologista",
+  "Oncologista",
+  "Gastroenterologista",
+  "Nefrologista",
+  "Hematologista",
+  "Otorrinolaringologista",
+  "Urologista",
+  "Infectologista",
+  "Angiologista",
+  "Anestesiologista",
+  "Endoscopista",
+  "Hepatologista",
+  "Mastologista",
+  "Pneumologista",
+  "Radiologista",
+  "Reumatologista Pediátrico",
+  "Neuropediatra",
+  "Geriatra",
+  "Imunologista",
+  "Nutrólogo",
+  "Dermatologista Pediátrico",
+  "Cardiologista Pediátrico",
+  "Oftalmologista Pediátrico",
+  "Cirurgião Geral",
+  "Cirurgião Plástico",
+  "Endocrinologista Pediátrico",
 ];
 
 interface FormSectionProps {
@@ -360,12 +376,6 @@ function passwordIsStrong(password: string) {
       clientErrors.push("A especialidade deve conter apenas letras e espaços.");
     }
 
-    if (!formData.photo) {
-      const message = "Envie a foto do profissional antes de finalizar o cadastro.";
-      clientErrors.push(message);
-      setPhotoError(message);
-    }
-
     if (!about) {
       clientErrors.push("Conte um pouco sobre você.");
     } else if (about.length < 30) {
@@ -428,31 +438,23 @@ function passwordIsStrong(password: string) {
     const postalCodeDigits = onlyDigits(formData.clinicZipCode);
 
     const photoFile = formData.photo;
-    if (!photoFile) {
-      // Este bloco não deve ser alcançado devido às validações anteriores, mas garante segurança.
-      const message = "Envie a foto do profissional antes de finalizar o cadastro.";
-      setErrors([message]);
-      setPhotoError(message);
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
-      return;
-    }
 
-    let photoUrlString: string;
-    try {
-      photoUrlString = await readFileAsDataUrl(photoFile);
-    } catch (imageError) {
-      const message =
-        imageError instanceof Error
-          ? imageError.message
-          : "Não foi possível processar a imagem enviada.";
-      setErrors([message]);
-      setPhotoError(message);
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+    let photoUrlString: string | null = null;
+    if (photoFile) {
+      try {
+        photoUrlString = await readFileAsDataUrl(photoFile);
+      } catch (imageError) {
+        const message =
+          imageError instanceof Error
+            ? imageError.message
+            : "Não foi possível processar a imagem enviada.";
+        setErrors([message]);
+        setPhotoError(message);
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
       }
-      return;
     }
 
     const doctorData = {
@@ -472,7 +474,7 @@ function passwordIsStrong(password: string) {
       streetAndNumber: clinicAddress,
       city: clinicCity,
       postalCode: postalCodeDigits,
-      photoUrl: photoUrlString,
+      ...(photoUrlString ? { photoUrl: photoUrlString } : {}),
     };
 
     console.log("Enviando cadastro de médico com payload:", doctorData);
@@ -758,7 +760,6 @@ function passwordIsStrong(password: string) {
                           accept="image/*"
                           onChange={handleFileChange}
                           className="hidden"
-                          required
                         />
                       </div>
                       {photoError ? (

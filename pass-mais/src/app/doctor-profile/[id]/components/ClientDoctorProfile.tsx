@@ -1,25 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NavBar from "@/components/NavBar";
 import Link from "next/link";
 import Image from "next/image";
 import { Star, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Doctor as DoctorSummary } from "@/app/medical-appointments/types";
+import type {
+    Doctor as DoctorSummary,
+    DoctorSchedule,
+    DoctorScheduleDay,
+} from "@/app/medical-appointments/types";
 
-interface AvailableSlot {
-    date: string;
-    times: string[];
-}
+type ScheduleStatus = "idle" | "loading" | "success" | "error";
 
 interface Doctor extends DoctorSummary {
     consultationFee?: number | null;
-    availableSlots: AvailableSlot[];
 }
 
 interface ClientDoctorProfileProps {
     doctor: Doctor;
+    schedule: DoctorSchedule | null;
+    scheduleStatus: ScheduleStatus;
+    scheduleError: string | null;
+    onRetrySchedule: () => void;
 }
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
@@ -30,11 +34,116 @@ const joinAddressParts = (...parts: Array<string | null | undefined>) =>
         .filter((value) => value.length > 0)
         .join(", ");
 
-export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps) {
+function zonedTimeToUtc(isoDate: string, time: string, timeZone: string) {
+    try {
+        const [year, month, day] = isoDate.split("-").map(Number);
+        const [hour, minute] = time.split(":").map(Number);
+        const candidate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+        const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        });
+        const parts = formatter.formatToParts(candidate);
+        const data: Record<string, string> = {};
+        for (const part of parts) {
+            data[part.type] = part.value;
+        }
+        const tzDate = new Date(
+            Date.UTC(
+                Number(data.year),
+                Number(data.month) - 1,
+                Number(data.day),
+                Number(data.hour),
+                Number(data.minute),
+                Number(data.second)
+            )
+        );
+        const offset = tzDate.getTime() - candidate.getTime();
+        return new Date(candidate.getTime() - offset);
+    } catch {
+        return null;
+    }
+}
+
+function isSlotPast(day: DoctorScheduleDay, slot: string, schedule: DoctorSchedule | null) {
+    if (!schedule) return false;
+    const utcDate = zonedTimeToUtc(day.isoDate, slot, schedule.timezone);
+    if (!utcDate) return false;
+    return utcDate.getTime() <= Date.now();
+}
+
+function formatIsoDateLabel(isoDate: string, schedule: DoctorSchedule | null) {
+    if (!schedule) return isoDate;
+    const [year, month, day] = isoDate.split("-").map(Number);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    return new Intl.DateTimeFormat("pt-BR", {
+        timeZone: schedule.timezone,
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+    }).format(utcDate);
+}
+
+function formatScheduleRange(schedule: DoctorSchedule | null) {
+    if (!schedule) return null;
+    const formatDate = (isoDate: string) => {
+        const [year, month, day] = isoDate.split("-").map(Number);
+        const utcDate = new Date(Date.UTC(year, month - 1, day));
+        return new Intl.DateTimeFormat("pt-BR", {
+            timeZone: schedule.timezone,
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+        }).format(utcDate);
+    };
+    return `${formatDate(schedule.startDate)} - ${formatDate(schedule.endDate)}`;
+}
+
+export default function ClientDoctorProfile({
+    doctor,
+    schedule,
+    scheduleStatus,
+    scheduleError,
+    onRetrySchedule,
+}: ClientDoctorProfileProps) {
     const router = useRouter();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [forWhom, setForWhom] = useState<string>("self");
+
+    const sortedDays = useMemo(() => schedule?.days ?? [], [schedule]);
+    const availableDays = useMemo(
+        () => sortedDays.filter((day) => !day.blocked && day.slots.length > 0),
+        [sortedDays]
+    );
+    const selectedDay = useMemo(
+        () => sortedDays.find((day) => day.isoDate === selectedDate) ?? null,
+        [sortedDays, selectedDate]
+    );
+    const scheduleRangeLabel = useMemo(() => formatScheduleRange(schedule), [schedule]);
+
+    useEffect(() => {
+        if (!schedule || availableDays.length === 0) {
+            setSelectedDate(null);
+            setSelectedTime(null);
+            return;
+        }
+
+        setSelectedDate((prev) => {
+            if (prev && availableDays.some((day) => day.isoDate === prev)) {
+                return prev;
+            }
+            const first = availableDays[0]?.isoDate ?? null;
+            return first;
+        });
+        setSelectedTime(null);
+    }, [schedule, availableDays]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("pt-BR", {
@@ -43,9 +152,9 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
         }).format(value);
     };
 
-    const handleDateSelect = (date: string) => {
-        setSelectedDate(date);
-        setSelectedTime(null); // Resetar o horário ao mudar a data
+    const handleDateSelect = (isoDate: string) => {
+        setSelectedDate(isoDate);
+        setSelectedTime(null);
     };
 
     const handleTimeSelect = (time: string) => {
@@ -53,10 +162,10 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
     };
 
     const handleSubmit = () => {
-        if (!selectedDate || !selectedTime) {
-            alert("Por favor, selecione uma data e um horário.");
-            return;
-        }
+    if (!selectedDate || !selectedTime) {
+        alert("Por favor, selecione uma data e um horário.");
+        return;
+    }
 
         // Redirecionar para a página de pagamento com os dados do agendamento
         router.push(
@@ -133,49 +242,86 @@ export default function ClientDoctorProfile({ doctor }: ClientDoctorProfileProps
                     {/* Agenda */}
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-200">
                         <h3 className="text-2xl font-semibold text-gray-900 mb-4">Agenda</h3>
+                        {scheduleRangeLabel && (
+                            <p className="mb-4 text-sm text-gray-500">
+                                Agenda disponível entre {scheduleRangeLabel} ({schedule?.timezone})
+                            </p>
+                        )}
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-gray-700 mb-2">Selecione a data:</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {doctor.availableSlots.map((slot) => (
-                                        <button
-                                            key={slot.date}
-                                            onClick={() => handleDateSelect(slot.date)}
-                                            className={`px-4 py-2 rounded-lg border ${selectedDate === slot.date
-                                                    ? "bg-blue-600 text-white border-blue-600"
-                                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
-                                                } transition-all duration-200`}
-                                        >
-                                            {new Date(slot.date).toLocaleDateString("pt-BR", {
-                                                weekday: "short",
-                                                day: "2-digit",
-                                                month: "short",
+                            {scheduleStatus === "loading" || scheduleStatus === "idle" ? (
+                                <div className="flex items-center gap-3 text-gray-600">
+                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-[#5179EF]" />
+                                    <span>Carregando agenda...</span>
+                                </div>
+                            ) : scheduleStatus === "error" ? (
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                    <p>{scheduleError ?? "Não foi possível carregar a agenda."}</p>
+                                    <button
+                                        type="button"
+                                        onClick={onRetrySchedule}
+                                        className="mt-2 inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-1 font-medium hover:bg-red-100"
+                                    >
+                                        Tentar novamente
+                                    </button>
+                                </div>
+                            ) : availableDays.length === 0 ? (
+                                <p className="text-gray-600">Nenhum horário disponível.</p>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="block text-gray-700 mb-2">Selecione a data:</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {sortedDays.map((day) => {
+                                                const hasSlots = !day.blocked && day.slots.length > 0;
+                                                return (
+                                                    <button
+                                                        key={day.isoDate}
+                                                        type="button"
+                                                        onClick={() => hasSlots && handleDateSelect(day.isoDate)}
+                                                        disabled={!hasSlots}
+                                                        className={`rounded-lg border px-4 py-2 text-sm transition ${
+                                                            selectedDate === day.isoDate
+                                                                ? "border-[#5179EF] bg-[#F3F6FF] text-[#1E3D8F]"
+                                                                : hasSlots
+                                                                ? "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                                                : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                                                        }`}
+                                                    >
+                                                        {formatIsoDateLabel(day.isoDate, schedule)}
+                                                    </button>
+                                                );
                                             })}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {selectedDate && (
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Selecione o horário:</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {doctor.availableSlots
-                                            .find((slot) => slot.date === selectedDate)
-                                            ?.times.map((time) => (
-                                                <button
-                                                    key={time}
-                                                    onClick={() => handleTimeSelect(time)}
-                                                    className={`px-4 py-2 rounded-lg border ${selectedTime === time
-                                                            ? "bg-blue-600 text-white border-blue-600"
-                                                            : "bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
-                                                        } transition-all duration-200`}
-                                                >
-                                                    {time}
-                                                </button>
-                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+
+                                    {selectedDate && selectedDay && (
+                                        <div>
+                                            <label className="block text-gray-700 mb-2">Selecione o horário:</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedDay.slots.map((time) => {
+                                                    const past = isSlotPast(selectedDay, time, schedule);
+                                                    return (
+                                                        <button
+                                                            key={time}
+                                                            type="button"
+                                                            onClick={() => !past && handleTimeSelect(time)}
+                                                            disabled={past}
+                                                            className={`rounded-lg border px-4 py-2 text-sm transition ${
+                                                                selectedTime === time
+                                                                    ? "border-[#5179EF] bg-[#F3F6FF] text-[#1E3D8F]"
+                                                                    : past
+                                                                    ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                                                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                                            }`}
+                                                        >
+                                                            {time}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
