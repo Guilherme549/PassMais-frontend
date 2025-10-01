@@ -16,8 +16,18 @@ export const fallbackDoctors: Doctor[] = [
         clinicName: "Clínica Bem-Estar",
         clinicStreetAndNumber: "R. Ana Luiza Souza, Qd. 24 - Lt. 288",
         clinicCity: "Anápolis",
+        clinicState: "GO",
         clinicPostalCode: "75110-030",
         consultationPrice: 250,
+        serviceLocations: [
+            {
+                name: "Clínica Bem-Estar",
+                city: "Anápolis",
+                state: "GO",
+                address: "R. Ana Luiza Souza, Qd. 24 - Lt. 288",
+                postalCode: "75110-030",
+            },
+        ],
     },
     {
         id: "2",
@@ -32,8 +42,18 @@ export const fallbackDoctors: Doctor[] = [
         clinicName: "Clínica Coração Saudável",
         clinicStreetAndNumber: "Av. Brasil, 100 - Centro",
         clinicCity: "Goiânia",
+        clinicState: "GO",
         clinicPostalCode: "74000-000",
         consultationPrice: 280,
+        serviceLocations: [
+            {
+                name: "Clínica Coração Saudável",
+                city: "Goiânia",
+                state: "GO",
+                address: "Av. Brasil, 100 - Centro",
+                postalCode: "74000-000",
+            },
+        ],
     },
     {
         id: "3",
@@ -48,7 +68,17 @@ export const fallbackDoctors: Doctor[] = [
         clinicName: "Clínica Pele & Saúde",
         clinicStreetAndNumber: "Rua 10, 500 - Setor Oeste",
         clinicCity: "Goiânia",
+        clinicState: "GO",
         clinicPostalCode: "74120-020",
         consultationPrice: 300,
+        serviceLocations: [
+            {
+                name: "Clínica Pele & Saúde",
+                city: "Goiânia",
+                state: "GO",
+                address: "Rua 10, 500 - Setor Oeste",
+                postalCode: "74120-020",
+            },
+        ],
     },
 ];
