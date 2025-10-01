@@ -1,9 +1,12 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { type Doctor } from "../types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { jsonGet } from "@/lib/api";
+import type { Doctor, DoctorSchedule, DoctorScheduleDay } from "../types";
 
 interface DoctorModalProps {
     doctor: Doctor;
@@ -11,6 +14,24 @@ interface DoctorModalProps {
 }
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+type ScheduleStatus = "idle" | "loading" | "success" | "error";
+
+type DoctorScheduleCacheEntry = {
+    data: DoctorSchedule;
+    expiresAt: number;
+};
+
+const scheduleCache = new Map<string, DoctorScheduleCacheEntry>();
+
+type WeekDayCell = {
+    isoDate: string;
+    header: string;
+    dayData: DoctorScheduleDay | null;
+    isToday: boolean;
+    hasAvailability: boolean;
+};
 
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
     parts
@@ -18,32 +39,401 @@ const joinAddressParts = (...parts: Array<string | null | undefined>) =>
         .filter((value) => value.length > 0)
         .join(", ");
 
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(timeZone: string, options: Intl.DateTimeFormatOptions) {
+    const key = `${timeZone}-${JSON.stringify(options)}`;
+    if (!dateFormatterCache.has(key)) {
+        dateFormatterCache.set(key, new Intl.DateTimeFormat("pt-BR", options));
+    }
+    return dateFormatterCache.get(key)!;
+}
+
+function normalizeSchedule(response: DoctorSchedule): DoctorSchedule {
+    const days = [...(response.days ?? [])]
+        .map((day) => ({
+            ...day,
+            source: day.source ?? "none",
+            slots: [...(day.slots ?? [])].sort((a, b) => a.localeCompare(b)),
+        }))
+        .sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+
+    return {
+        ...response,
+        days,
+    };
+}
+
+function zonedTimeToUtc(isoDate: string, time: string, timeZone: string) {
+    const [year, month, day] = isoDate.split("-").map(Number);
+    const [hour, minute] = time.split(":").map(Number);
+    const candidate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(candidate);
+    const lookup: Record<string, string> = {};
+    for (const part of parts) {
+        lookup[part.type] = part.value;
+    }
+    const tzDate = new Date(
+        Date.UTC(
+            Number(lookup.year),
+            Number(lookup.month) - 1,
+            Number(lookup.day),
+            Number(lookup.hour),
+            Number(lookup.minute),
+            Number(lookup.second)
+        )
+    );
+    const offset = tzDate.getTime() - candidate.getTime();
+    return new Date(candidate.getTime() - offset);
+}
+
+function isSlotPast(day: DoctorScheduleDay, slot: string, schedule: DoctorSchedule) {
+    try {
+        const slotDate = zonedTimeToUtc(day.isoDate, slot, schedule.timezone);
+        return slotDate.getTime() <= Date.now();
+    } catch {
+        return false;
+    }
+}
+
+function formatRangeLabel(schedule: DoctorSchedule | null) {
+    if (!schedule) return null;
+    const formatDate = (isoDate: string) => {
+        const [year, month, day] = isoDate.split("-").map(Number);
+        const utcDate = new Date(Date.UTC(year, month - 1, day));
+        const formatter = getFormatter(schedule.timezone, {
+            timeZone: schedule.timezone,
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+        });
+        return formatter.format(utcDate);
+    };
+
+    const start = formatDate(schedule.startDate);
+    const end = formatDate(schedule.endDate);
+    return `${start} - ${end}`;
+}
+
+function formatDateKey(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function getMondayIndex(date: Date) {
+    return (date.getDay() + 6) % 7;
+}
+
+function getWeekStart(date: Date) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - getMondayIndex(start));
+    return start;
+}
+
+function getTodayInTimezone(timezone: string) {
+    const now = new Date();
+    try {
+        const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        });
+        const parts = formatter.formatToParts(now);
+        const lookup: Record<string, string> = {};
+        for (const part of parts) {
+            lookup[part.type] = part.value;
+        }
+        const year = Number(lookup.year);
+        const month = Number(lookup.month);
+        const day = Number(lookup.day);
+        if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) return new Date();
+        return new Date(Date.UTC(year, month - 1, day));
+    } catch {
+        return new Date();
+    }
+}
+
+function formatWeekdayHeader(date: Date, timezone: string) {
+    const formatter = getFormatter(timezone, {
+        timeZone: timezone,
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+    });
+    const formatted = formatter.format(date);
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function buildCurrentWeekCells(schedule: DoctorSchedule | null): WeekDayCell[] {
+    if (!schedule) return [];
+
+    const dayMap = new Map((schedule.days ?? []).map((day) => [day.isoDate, day]));
+    const referenceDate = getTodayInTimezone(schedule.timezone);
+    const weekStart = getWeekStart(referenceDate);
+
+    const cells: WeekDayCell[] = [];
+    for (let index = 0; index < 7; index += 1) {
+        const current = new Date(weekStart);
+        current.setDate(weekStart.getDate() + index);
+        const isoDate = formatDateKey(current);
+        const dayData = dayMap.get(isoDate) ?? null;
+        const hasAvailability = Boolean(dayData && !dayData.blocked && dayData.slots.length > 0);
+
+        cells.push({
+            isoDate,
+            header: formatWeekdayHeader(current, schedule.timezone),
+            dayData,
+            isToday: isoDate === formatDateKey(referenceDate),
+            hasAvailability,
+        });
+    }
+
+    return cells;
+}
+
 export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
+    const router = useRouter();
+    const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+    const alertShownRef = useRef(false);
+
+    const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>("idle");
+    const [schedule, setSchedule] = useState<DoctorSchedule | null>(null);
+    const [scheduleError, setScheduleError] = useState<{ message: string; status?: number } | null>(null);
+    const [fetchToken, setFetchToken] = useState(0);
+
+    const dateRangeLabel = useMemo(() => formatRangeLabel(schedule), [schedule]);
+    const weekCells = useMemo(() => buildCurrentWeekCells(schedule), [schedule]);
+
+    const fetchSchedule = useCallback(
+        async (targetDoctor: Doctor) => {
+            if (!targetDoctor) return;
+
+            alertShownRef.current = false;
+            const cache = scheduleCache.get(targetDoctor.id);
+            if (cache && cache.expiresAt > Date.now()) {
+                setSchedule(cache.data);
+                setScheduleStatus("success");
+                setScheduleError(null);
+                return;
+            }
+
+            setScheduleStatus("loading");
+            setScheduleError(null);
+
+            try {
+                const response = await jsonGet<DoctorSchedule>(
+                    `/api/patient/doctors/${targetDoctor.id}/schedule`,
+                    {
+                        headers: { Accept: "application/json" },
+                    }
+                );
+
+                const normalized = normalizeSchedule(response);
+                scheduleCache.set(targetDoctor.id, {
+                    data: normalized,
+                    expiresAt: Date.now() + CACHE_TTL_MS,
+                });
+
+                setSchedule(normalized);
+                setScheduleStatus("success");
+            } catch (error) {
+                const status = (error as { status?: number } | null)?.status;
+
+                const message =
+                    status === 401
+                        ? "Sessão expirada"
+                        : status === 404 || status === 422
+                        ? "Agenda indisponível para este médico."
+                        : "Falha ao carregar agenda.";
+
+                setScheduleStatus("error");
+                setScheduleError({ message, status });
+
+                if (typeof window !== "undefined" && !alertShownRef.current) {
+                    alertShownRef.current = true;
+                    window.setTimeout(() => window.alert(message), 0);
+                }
+
+                if (status === 401) {
+                    router.push(`/login?redirect=/medical-appointments`);
+                }
+            }
+        },
+        [router]
+    );
+
+    useEffect(() => {
+        if (!doctor) return;
+        setSchedule(null);
+        fetchSchedule(doctor);
+    }, [doctor, fetchSchedule, fetchToken]);
+
+    useEffect(() => {
+        if (!doctor) return;
+        closeButtonRef.current?.focus();
+    }, [doctor]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                onClose();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
     if (!doctor) return null;
 
+    const renderSchedule = () => {
+        if (scheduleStatus === "loading") {
+            return (
+                <div className="flex flex-col gap-4" aria-live="polite" aria-busy="true">
+                    <div className="flex items-center gap-3 text-gray-600">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>Carregando agenda...</span>
+                    </div>
+                    <div className="grid gap-3">
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <div
+                                key={index}
+                                className="h-20 rounded-xl border border-gray-200 bg-gray-100 animate-pulse"
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        if (scheduleStatus === "error" && scheduleError) {
+            const canRetry = scheduleError.status !== 401;
+            return (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <p>{scheduleError.message}</p>
+                    {canRetry && (
+                        <button
+                            type="button"
+                            onClick={() => setFetchToken((token) => token + 1)}
+                            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-1 font-medium text-red-700 hover:bg-red-100"
+                        >
+                            Tentar novamente
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        if (scheduleStatus === "success" && schedule) {
+            return (
+                <div className="space-y-5" aria-live="polite">
+                    {dateRangeLabel && (
+                        <p className="text-sm text-gray-500">Agenda disponível entre {dateRangeLabel}</p>
+                    )}
+                    {weekCells.length === 0 ? (
+                        <p className="text-sm text-gray-500">Agenda indisponível para esta semana.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {weekCells.map((cell) => {
+                                const dayData = cell.dayData;
+                                return (
+                                    <div
+                                        key={cell.isoDate}
+                                        className={`flex h-full flex-col rounded-2xl border bg-white p-4 shadow-sm transition ${
+                                            cell.isToday ? "border-[#5179EF] shadow-md" : "border-gray-200"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-semibold text-gray-900">
+                                                    {cell.header}
+                                                </span>
+                                                <span className="text-[11px] uppercase tracking-wide text-gray-400">
+                                                    Semana atual
+                                                </span>
+                                            </div>
+                                            {cell.isToday && (
+                                                <span className="rounded-full bg-[#5179EF]/10 px-3 py-1 text-[11px] font-semibold text-[#1E3D8F]">
+                                                    Hoje
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="mt-3 flex-1">
+                                            {cell.hasAvailability && dayData ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {dayData.slots.map((slot) => {
+                                                        const past = isSlotPast(dayData, slot, schedule);
+                                                        return (
+                                                            <span
+                                                                key={`${cell.isoDate}-${slot}`}
+                                                                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                                                                    past
+                                                                        ? "border-gray-200 bg-gray-100 text-gray-400"
+                                                                        : "border-[#D6E0FF] bg-[#F3F6FF] text-[#1E3D8F]"
+                                                                }`}
+                                                            >
+                                                                {slot}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : dayData ? (
+                                                <p className="text-sm text-gray-400">Sem horários disponíveis.</p>
+                                            ) : (
+                                                <p className="text-sm text-gray-400">Agenda não cadastrada para este dia.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        return null;
+    };
+
     return (
-        <div className="fixed inset-0 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto p-8 relative shadow-2xl focus:outline-none">
                 <button
+                    ref={closeButtonRef}
                     onClick={onClose}
                     className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 transition-colors duration-200"
+                    aria-label="Fechar modal"
                 >
-                    <X size={24} className="cursor-pointer" />
+                    <X size={24} aria-hidden="true" />
                 </button>
 
-                <div className="space-y-6">
-                    <div className="flex items-center gap-6">
-                        <div className="relative w-24 h-24 flex-shrink-0">
+                <div className="space-y-8">
+                    <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+                        <div className="relative h-24 w-24 flex-shrink-0">
                             <Image
                                 fill
                                 src={doctor.photo ?? DOCTOR_AVATAR_PLACEHOLDER}
                                 alt="Imagem do médico"
-                                className="rounded-lg object-cover border-2 border-gray-100 w-full h-full"
+                                className="rounded-lg object-cover border-2 border-gray-100"
                             />
                         </div>
-                        <div>
+                        <div className="space-y-2">
                             <h2 className="text-2xl font-bold text-gray-900">{doctor.name}</h2>
-                            <p className="text-lg text-gray-600">{doctor.specialty} - CRM {doctor.crm}</p>
+                            <p className="text-lg text-gray-600">{doctor.specialty} • CRM {doctor.crm}</p>
                         </div>
                     </div>
 
@@ -69,12 +459,27 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                         )}
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="space-y-3">
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900">Agenda disponível</h3>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Consulte os horários disponíveis e continue o agendamento no perfil do médico.
+                            </p>
+                        </div>
+                        {renderSchedule()}
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                        >
+                            Fechar
+                        </button>
                         <Link
                             href={`/doctor-profile/${doctor.id}`}
-                            className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
-              hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
-              transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer"
+                            className="inline-flex items-center justify-center rounded-lg bg-[#5179EF] px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50"
                         >
                             Agendar Consulta
                         </Link>
