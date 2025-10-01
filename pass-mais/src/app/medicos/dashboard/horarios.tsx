@@ -95,6 +95,14 @@ function minutesFromTime(time: string) {
     return hours * 60 + minutes;
 }
 
+function addMinutesToTime(time: string, minutes: number) {
+    const total = minutesFromTime(time) + minutes;
+    const safe = Math.max(0, Math.min(total, 24 * 60));
+    const hour = String(Math.floor(safe / 60)).padStart(2, "0");
+    const minute = String(safe % 60).padStart(2, "0");
+    return `${hour}:${minute}`;
+}
+
 function formatDate(date: Date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -200,6 +208,88 @@ function duplicateSpecificSlots(slots: SpecificSlot[], suffix: string) {
     }));
 }
 
+function splitTimesByContinuity(times: string[], interval: number, bufferMinutes: number) {
+    const ordered = [...times].sort((a, b) => minutesFromTime(a) - minutesFromTime(b));
+    const sequences: string[][] = [];
+    const step = interval + bufferMinutes;
+
+    let current: string[] = [];
+    let previous: number | null = null;
+
+    ordered.forEach((time) => {
+        const minutes = minutesFromTime(time);
+        if (previous != null && minutes - previous !== step) {
+            if (current.length > 0) {
+                sequences.push(current);
+                current = [];
+            }
+        }
+
+        current.push(time);
+        previous = minutes;
+    });
+
+    if (current.length > 0) {
+        sequences.push(current);
+    }
+
+    return sequences;
+}
+
+function splitSpecificSlotByTime(
+    slot: SpecificSlot,
+    timeToRemove: string,
+    appointmentInterval: number,
+    bufferMinutes: number
+) {
+    const interval = Math.max(5, slot.interval ?? appointmentInterval);
+    const preview = generateSlotsPreview([{ start: slot.start, end: slot.end }], interval, bufferMinutes);
+    if (!preview.includes(timeToRemove)) {
+        return { slots: [slot], changed: false };
+    }
+
+    const remainingTimes = preview.filter((time) => time !== timeToRemove);
+    if (remainingTimes.length === 0) {
+        return { slots: [], changed: true };
+    }
+
+    const sequences = splitTimesByContinuity(remainingTimes, interval, bufferMinutes);
+    const updatedSlots = sequences.map((sequence, index) => ({
+        id: index === 0 ? slot.id : createId(),
+        start: sequence[0],
+        end: addMinutesToTime(sequence[sequence.length - 1], interval),
+        interval: slot.interval,
+    }));
+
+    return { slots: updatedSlots, changed: true };
+}
+
+function splitRecurringSlotByTime(
+    slot: RecurringSlot,
+    timeToRemove: string,
+    appointmentInterval: number,
+    bufferMinutes: number
+) {
+    const preview = generateSlotsPreview([{ start: slot.start, end: slot.end }], appointmentInterval, bufferMinutes);
+    if (!preview.includes(timeToRemove)) {
+        return { slots: [slot], changed: false };
+    }
+
+    const remainingTimes = preview.filter((time) => time !== timeToRemove);
+    if (remainingTimes.length === 0) {
+        return { slots: [], changed: true };
+    }
+
+    const sequences = splitTimesByContinuity(remainingTimes, appointmentInterval, bufferMinutes);
+    const updatedSlots = sequences.map((sequence, index) => ({
+        id: index === 0 ? slot.id : createId(),
+        start: sequence[0],
+        end: addMinutesToTime(sequence[sequence.length - 1], appointmentInterval),
+    }));
+
+    return { slots: updatedSlots, changed: true };
+}
+
 function getNextSevenDays() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -260,7 +350,7 @@ export default function Horarios() {
         return upcomingDates.map((date) => {
             const isoDate = formatDate(date);
             const weekdayIndex = date.getDay();
-            const weekday = ORDERED_DAYS[(weekdayIndex + 6) % 7];
+            const weekday = ORDERED_DAYS[(weekdayIndex + 6) % 7] as Weekday;
 
             const specificSlotsForDay = specificSchedule[isoDate]?.slots ?? [];
             const hasSpecific = specificSlotsForDay.length > 0;
@@ -286,20 +376,116 @@ export default function Horarios() {
                 source = "recurring";
             }
 
-            const previewSlots = generateSlotsPreview(
-                slots,
-                source === "specific" ? specificSettings.appointmentInterval : recurringSettings.appointmentInterval,
-                source === "specific" ? specificSettings.bufferMinutes : recurringSettings.bufferMinutes
-            );
+            let previewSlots: string[] = [];
+            if (source === "specific") {
+                const buffer = specificSettings.bufferMinutes;
+                const specificSlots = slots as SpecificSlot[];
+                previewSlots = specificSlots.flatMap((slot) =>
+                    generateSlotsPreview(
+                        [{ start: slot.start, end: slot.end }],
+                        slot.interval ?? specificSettings.appointmentInterval,
+                        buffer
+                    )
+                );
+            } else if (source === "recurring") {
+                previewSlots = generateSlotsPreview(
+                    slots as RecurringSlot[],
+                    recurringSettings.appointmentInterval,
+                    recurringSettings.bufferMinutes
+                );
+            }
 
             return {
                 date,
                 isoDate,
                 source,
                 slotPreview: previewSlots,
+                weekday,
             };
         });
     }, [recurringSchedule, recurringSettings, specificSchedule, specificSettings]);
+
+    const handleRemovePreviewSlot = ({
+        isoDate,
+        weekday,
+        source,
+        time,
+    }: {
+        isoDate: string;
+        weekday: Weekday;
+        source: "specific" | "recurring" | "none";
+        time: string;
+    }) => {
+        if (source === "specific") {
+            const daySlots = specificSchedule[isoDate]?.slots ?? [];
+            if (daySlots.length === 0) return;
+
+            const bufferMinutes = specificSettings.bufferMinutes;
+            const nextSlots: SpecificSlot[] = [];
+            let changed = false;
+
+            daySlots.forEach((slot) => {
+                const interval = slot.interval ?? specificSettings.appointmentInterval;
+                const result = splitSpecificSlotByTime(slot, time, interval, bufferMinutes);
+                if (result.changed) {
+                    changed = true;
+                }
+                nextSlots.push(...result.slots);
+            });
+
+            if (!changed) return;
+
+            setSpecificSchedule((prev) => {
+                const next = { ...prev };
+                if (nextSlots.length === 0) {
+                    delete next[isoDate];
+                } else {
+                    next[isoDate] = { slots: nextSlots };
+                }
+                return next;
+            });
+
+            if (selectedDay === isoDate) {
+                setSpecificErrors(validateSlots(nextSlots));
+            }
+        } else if (source === "recurring") {
+            const bufferMinutes = recurringSettings.bufferMinutes;
+            const appointmentInterval = recurringSettings.appointmentInterval;
+
+            setRecurringSchedule((prev) => {
+                const dayData = prev[weekday];
+                if (!dayData) return prev;
+
+                const nextSlots: RecurringSlot[] = [];
+                let changed = false;
+
+                dayData.slots.forEach((slot) => {
+                    const result = splitRecurringSlotByTime(slot, time, appointmentInterval, bufferMinutes);
+                    if (result.changed) {
+                        changed = true;
+                    }
+                    nextSlots.push(...result.slots);
+                });
+
+                if (!changed) return prev;
+
+                const updatedSchedule = {
+                    ...prev,
+                    [weekday]: {
+                        ...dayData,
+                        slots: nextSlots,
+                    },
+                };
+
+                setRecurringErrors((prevErrors) => ({
+                    ...prevErrors,
+                    [weekday]: validateSlots(nextSlots),
+                }));
+
+                return updatedSchedule;
+            });
+        }
+    };
 
     const handleMonthChange = (direction: "prev" | "next") => {
         setCurrentMonth((prev) => {
@@ -1203,7 +1389,7 @@ export default function Horarios() {
                 </div>
                 <div className="px-8 py-6">
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        {previewNextSevenDays.map(({ date, source, slotPreview, isoDate }) => (
+                        {previewNextSevenDays.map(({ date, source, slotPreview, isoDate, weekday }) => (
                             <div key={isoDate} className="rounded-xl border border-gray-200 p-4">
                                 <div className="flex items-center justify-between text-sm text-gray-600">
                                     <span className="font-medium text-gray-900">{formatWeekdayPreview(date)}</span>
@@ -1225,12 +1411,29 @@ export default function Horarios() {
                                     ) : (
                                         <div className="flex flex-wrap gap-2">
                                             {slotPreview.map((slot, index) => (
-                                                <span
+                                                <button
+                                                    type="button"
                                                     key={`${isoDate}-${slot}-${index}`}
-                                                    className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
+                                                    onClick={() =>
+                                                        handleRemovePreviewSlot({
+                                                            isoDate,
+                                                            weekday,
+                                                            source,
+                                                            time: slot,
+                                                        })
+                                                    }
+                                                    className={`group rounded-full border border-transparent px-3 py-1 text-xs transition ${
+                                                        source === "none"
+                                                            ? "cursor-default bg-gray-100 text-gray-400"
+                                                            : "flex items-center gap-2 bg-gray-100 text-gray-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                                    }`}
+                                                    disabled={source === "none"}
                                                 >
-                                                    {slot}
-                                                </span>
+                                                    <span>{slot}</span>
+                                                    {source !== "none" && (
+                                                        <span className="hidden text-[10px] font-semibold group-hover:inline">×</span>
+                                                    )}
+                                                </button>
                                             ))}
                                         </div>
                                     )}
