@@ -1,15 +1,43 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ClientPayment from "./components/ClientPayment";
 
-// Usar uma tipagem genérica para evitar o erro com PageProps
-export default async function Payment({ searchParams }: any) {
-    const session = await getServerSession();
-    if (!session) redirect("/");
+export default function Payment() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [isReady, setIsReady] = useState(false);
 
-    const { doctorId, date, time, forWhom } = searchParams;
+    const doctorId = searchParams.get("doctorId");
+    const date = searchParams.get("date");
+    const time = searchParams.get("time");
+    const forWhom = searchParams.get("forWhom");
 
-    if (!doctorId || !date || !time || !forWhom) redirect("/medical-appointments");
+    const currentPath = useMemo(() => {
+        const query = searchParams.toString();
+        return query.length > 0 ? `/payment?${query}` : "/payment";
+    }, [searchParams]);
+
+    useEffect(() => {
+        const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+
+        if (!token) {
+            router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+            return;
+        }
+
+        if (!doctorId || !date || !time || !forWhom) {
+            router.replace("/medical-appointments");
+            return;
+        }
+
+        setIsReady(true);
+    }, [router, currentPath, doctorId, date, time, forWhom]);
+
+    if (!isReady || !doctorId || !date || !time || !forWhom) {
+        return null;
+    }
 
     return (
         <ClientPayment
