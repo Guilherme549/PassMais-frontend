@@ -16,10 +16,11 @@ const DEFAULT_CITY_VISIBLE = 5;
 const CITY_INCREMENT = 10;
 
 const TOP_SPECIALTIES = [
+    "Clínico Geral",
     "Ginecologista",
     "Psiquiatra",
     "Psicólogo",
-    "Ortopedista - Traumatologista",
+    "Ortopedista",
     "Dermatologista",
     "Pediatra",
     "Endocrinologista",
@@ -74,6 +75,8 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
     const [cities, setCities] = useState<CityOption[]>([]);
     const [cityLoading, setCityLoading] = useState(false);
     const [cityError, setCityError] = useState<string | null>(null);
+    const [selectedCity, setSelectedCity] = useState<string | null>(null);
+    const [selectedState, setSelectedState] = useState<string | null>(null);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -214,6 +217,8 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         setCityOpen(false);
         setCityHighlightedIndex(null);
         setCityVisibleCount(DEFAULT_CITY_VISIBLE);
+        setSelectedCity(value.city);
+        setSelectedState(value.state);
     };
 
     const hasCityQuery = cityQuery.trim().length > 0;
@@ -261,6 +266,33 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
             setCityVisibleCount(DEFAULT_CITY_VISIBLE);
         }
     };
+
+    useEffect(() => {
+        const match = cityQuery.match(/^(.*?)(?:\s*-\s*([A-Za-z]{2}))$/);
+        if (!match) {
+            if (selectedCity !== null || selectedState !== null) {
+                setSelectedCity(null);
+                setSelectedState(null);
+            }
+            return;
+        }
+
+        const parsedCity = match[1]?.trim() ?? "";
+        const parsedState = match[2]?.trim().toUpperCase() ?? "";
+
+        if (parsedCity.length === 0 || parsedState.length === 0) {
+            if (selectedCity !== null || selectedState !== null) {
+                setSelectedCity(null);
+                setSelectedState(null);
+            }
+            return;
+        }
+
+        if (selectedCity !== parsedCity || selectedState !== parsedState) {
+            setSelectedCity(parsedCity);
+            setSelectedState(parsedState);
+        }
+    }, [cityQuery, selectedCity, selectedState]);
 
     return (
         <div className="flex w-full px-1">
@@ -368,6 +400,8 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                             onChange={(event) => {
                                 setCityQuery(event.target.value);
                                 openCityDropdown();
+                                setSelectedCity(null);
+                                setSelectedState(null);
                             }}
                             onFocus={openCityDropdown}
                             onKeyDown={handleCityKeyDown}
@@ -453,6 +487,8 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
 
                 {/* Botão de Pesquisa */}
                 <div className="flex items-end">
+                    <input type="hidden" name="city" value={selectedCity ?? ""} />
+                    <input type="hidden" name="state" value={selectedState ?? ""} />
                     <button
                         type="submit"
                         className="flex items-center gap-2 rounded-lg bg-[#5179EF] px-6 py-3 font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50"
