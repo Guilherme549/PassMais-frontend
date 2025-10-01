@@ -86,6 +86,33 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
         const id = raw?.id != null ? String(raw.id) : "";
         if (!id) continue;
 
+        const serviceLocations = extractServiceLocations(raw);
+
+        const clinicName =
+            typeof raw.clinicName === "string" && raw.clinicName.trim().length > 0
+                ? raw.clinicName.trim()
+                : serviceLocations[0]?.name ?? null;
+
+        const clinicStreetAndNumber =
+            typeof raw.clinicStreetAndNumber === "string" && raw.clinicStreetAndNumber.trim().length > 0
+                ? raw.clinicStreetAndNumber.trim()
+                : serviceLocations[0]?.address ?? null;
+
+        const clinicCity =
+            typeof raw.clinicCity === "string" && raw.clinicCity.trim().length > 0
+                ? raw.clinicCity.trim()
+                : serviceLocations[0]?.city ?? null;
+
+        const clinicState =
+            typeof raw.clinicState === "string" && raw.clinicState.trim().length > 0
+                ? raw.clinicState.trim()
+                : serviceLocations[0]?.state ?? null;
+
+        const clinicPostalCode =
+            typeof raw.clinicPostalCode === "string" && raw.clinicPostalCode.trim().length > 0
+                ? raw.clinicPostalCode.trim()
+                : serviceLocations[0]?.postalCode ?? null;
+
         normalized.push({
             id,
             name: typeof raw.name === "string" ? raw.name : "Nome não informado",
@@ -98,24 +125,14 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
                     ? raw.photoUrl
                     : null,
-            clinicName:
-                typeof raw.clinicName === "string" && raw.clinicName.trim().length > 0
-                    ? raw.clinicName
-                    : null,
-            clinicStreetAndNumber:
-                typeof raw.clinicStreetAndNumber === "string" && raw.clinicStreetAndNumber.trim().length > 0
-                    ? raw.clinicStreetAndNumber
-                    : null,
-            clinicCity:
-                typeof raw.clinicCity === "string" && raw.clinicCity.trim().length > 0
-                    ? raw.clinicCity
-                    : null,
-            clinicPostalCode:
-                typeof raw.clinicPostalCode === "string" && raw.clinicPostalCode.trim().length > 0
-                    ? raw.clinicPostalCode
-                    : null,
+            clinicName,
+            clinicStreetAndNumber,
+            clinicCity,
+            clinicState,
+            clinicPostalCode,
             consultationPrice:
                 typeof raw.consultationPrice === "number" ? raw.consultationPrice : null,
+            serviceLocations: serviceLocations.length > 0 ? serviceLocations : undefined,
             address: (() => {
                 const legacy =
                     typeof raw.address === "string" && raw.address.trim().length > 0
@@ -124,19 +141,15 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 if (legacy) return legacy;
 
                 const composedAddress = [
-                    typeof raw.clinicStreetAndNumber === "string"
-                        ? raw.clinicStreetAndNumber.trim()
-                        : "",
-                    typeof raw.clinicCity === "string" ? raw.clinicCity.trim() : "",
-                    typeof raw.clinicPostalCode === "string" ? raw.clinicPostalCode.trim() : "",
+                    clinicStreetAndNumber ?? "",
+                    clinicCity ?? "",
+                    clinicState ?? "",
+                    clinicPostalCode ?? "",
                 ]
                     .filter((value) => value.length > 0)
                     .join(", ");
 
-                const composed = [
-                    typeof raw.clinicName === "string" ? raw.clinicName.trim() : "",
-                    composedAddress,
-                ]
+                const composed = [clinicName ?? "", composedAddress]
                     .filter((value) => value.length > 0)
                     .join(" - ");
 
@@ -146,4 +159,64 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
     }
 
     return normalized;
+}
+
+function extractServiceLocations(source: Record<string, unknown>): Doctor["serviceLocations"] {
+    const rawLocations = source?.serviceLocations;
+
+    if (!Array.isArray(rawLocations)) {
+        return [];
+    }
+
+    return rawLocations
+        .map((entry) => {
+            if (!entry || typeof entry !== "object") return null;
+            const rawEntry = entry as Record<string, unknown>;
+
+            const city =
+                typeof rawEntry.city === "string" && rawEntry.city.trim().length > 0
+                    ? rawEntry.city.trim()
+                    : typeof rawEntry.cityName === "string" && rawEntry.cityName.trim().length > 0
+                    ? rawEntry.cityName.trim()
+                    : null;
+
+            const state =
+                typeof rawEntry.state === "string" && rawEntry.state.trim().length > 0
+                    ? rawEntry.state.trim()
+                    : typeof rawEntry.stateCode === "string" && rawEntry.stateCode.trim().length > 0
+                    ? rawEntry.stateCode.trim()
+                    : null;
+
+            const address =
+                typeof rawEntry.address === "string" && rawEntry.address.trim().length > 0
+                    ? rawEntry.address.trim()
+                    : typeof rawEntry.street === "string" && rawEntry.street.trim().length > 0
+                    ? rawEntry.street.trim()
+                    : null;
+
+            const postalCode =
+                typeof rawEntry.postalCode === "string" && rawEntry.postalCode.trim().length > 0
+                    ? rawEntry.postalCode.trim()
+                    : typeof rawEntry.zipCode === "string" && rawEntry.zipCode.trim().length > 0
+                    ? rawEntry.zipCode.trim()
+                    : null;
+
+            const name =
+                typeof rawEntry.name === "string" && rawEntry.name.trim().length > 0
+                    ? rawEntry.name.trim()
+                    : typeof rawEntry.clinicName === "string" && rawEntry.clinicName.trim().length > 0
+                    ? rawEntry.clinicName.trim()
+                    : null;
+
+            if (!city && !state && !address && !name && !postalCode) return null;
+
+            return {
+                name,
+                city,
+                state,
+                address,
+                postalCode,
+            };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 }
