@@ -8,9 +8,18 @@ import { useRouter } from "next/navigation";
 import { jsonGet } from "@/lib/api";
 import type { Doctor, DoctorSchedule, DoctorScheduleDay } from "../types";
 
+type SlotSelection = {
+    doctor: Doctor;
+    isoDate: string;
+    time: string;
+    timezone: string;
+    dateTimeUtc: string;
+};
+
 interface DoctorModalProps {
     doctor: Doctor;
     onClose: () => void;
+    onSlotSelect?: (selection: SlotSelection) => void;
 }
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
@@ -25,12 +34,19 @@ type DoctorScheduleCacheEntry = {
 
 const scheduleCache = new Map<string, DoctorScheduleCacheEntry>();
 
+type ProcessedSlot = {
+    key: string;
+    time: string;
+    isoDate: string;
+    dateTimeUtc: Date;
+};
+
 type WeekDayCell = {
     isoDate: string;
     header: string;
-    dayData: DoctorScheduleDay | null;
     isToday: boolean;
-    hasAvailability: boolean;
+    state: "available" | "empty" | "blocked" | "none";
+    slots: ProcessedSlot[];
 };
 
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
@@ -126,21 +142,10 @@ function formatRangeLabel(schedule: DoctorSchedule | null) {
 }
 
 function formatDateKey(date: Date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-}
-
-function getMondayIndex(date: Date) {
-    return (date.getDay() + 6) % 7;
-}
-
-function getWeekStart(date: Date) {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - getMondayIndex(start));
-    return start;
 }
 
 function getTodayInTimezone(timezone: string) {
@@ -167,45 +172,132 @@ function getTodayInTimezone(timezone: string) {
     }
 }
 
-function formatWeekdayHeader(date: Date, timezone: string) {
+function buildSlotKey(isoDate: string, time: string) {
+    return `${isoDate}T${time}`;
+}
+
+function getMondayIndex(date: Date) {
+    return (date.getDay() + 6) % 7;
+}
+
+function getWeekStart(date: Date) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - getMondayIndex(start));
+    return start;
+}
+
+function formatWeekdayHeader(isoDate: string, timezone: string) {
+    const reference = zonedTimeToUtc(isoDate, "12:00", timezone);
     const formatter = getFormatter(timezone, {
         timeZone: timezone,
         weekday: "short",
         day: "2-digit",
         month: "2-digit",
     });
-    const formatted = formatter.format(date);
+    const formatted = formatter.format(reference);
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
-function buildCurrentWeekCells(schedule: DoctorSchedule | null): WeekDayCell[] {
+function formatIsoFromDate(date: Date, timezone: string) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+    return formatter.format(date);
+}
+
+function getWeekdayIndexInTimezone(isoDate: string, timezone: string) {
+    const reference = zonedTimeToUtc(isoDate, "12:00", timezone);
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        weekday: "short",
+    });
+    const weekday = formatter.format(reference).toLowerCase();
+    const map: Record<string, number> = {
+        sun: 0,
+        mon: 1,
+        tue: 2,
+        wed: 3,
+        thu: 4,
+        fri: 5,
+        sat: 6,
+    };
+    const index = map[weekday] ?? 0;
+    return (index + 6) % 7; // transforma segunda-feira em índice 0
+}
+
+function shiftIsoDate(baseIso: string, amount: number, timezone: string) {
+    const baseUtc = zonedTimeToUtc(baseIso, "00:00", timezone);
+    baseUtc.setUTCDate(baseUtc.getUTCDate() + amount);
+    return formatIsoFromDate(baseUtc, timezone);
+}
+
+function collectAvailableSlots(day: DoctorScheduleDay, schedule: DoctorSchedule): ProcessedSlot[] {
+    const uniqueSlots = new Set<string>();
+    const processedSlots: ProcessedSlot[] = [];
+
+    for (const rawSlot of day.slots ?? []) {
+        const slot = rawSlot.trim();
+        if (!slot || uniqueSlots.has(slot)) continue;
+
+        if (isSlotPast(day, slot, schedule)) continue;
+
+        uniqueSlots.add(slot);
+        processedSlots.push({
+            key: buildSlotKey(day.isoDate, slot),
+            time: slot,
+            isoDate: day.isoDate,
+            dateTimeUtc: zonedTimeToUtc(day.isoDate, slot, schedule.timezone),
+        });
+    }
+
+    processedSlots.sort((a, b) => a.time.localeCompare(b.time));
+    return processedSlots;
+}
+
+function buildCalendarCells(schedule: DoctorSchedule | null): WeekDayCell[] {
     if (!schedule) return [];
 
+    const todayIso = formatDateKey(getTodayInTimezone(schedule.timezone));
     const dayMap = new Map((schedule.days ?? []).map((day) => [day.isoDate, day]));
-    const referenceDate = getTodayInTimezone(schedule.timezone);
-    const weekStart = getWeekStart(referenceDate);
+
+    const weekdayIndex = getWeekdayIndexInTimezone(todayIso, schedule.timezone);
+    const weekStartIso = shiftIsoDate(todayIso, -weekdayIndex, schedule.timezone);
 
     const cells: WeekDayCell[] = [];
+
     for (let index = 0; index < 7; index += 1) {
-        const current = new Date(weekStart);
-        current.setDate(weekStart.getDate() + index);
-        const isoDate = formatDateKey(current);
+        const isoDate = shiftIsoDate(weekStartIso, index, schedule.timezone);
         const dayData = dayMap.get(isoDate) ?? null;
-        const hasAvailability = Boolean(dayData && !dayData.blocked && dayData.slots.length > 0);
+
+        let state: WeekDayCell["state"] = "none";
+        let slots: ProcessedSlot[] = [];
+
+        if (dayData) {
+            if (dayData.blocked) {
+                state = "blocked";
+            } else {
+                slots = collectAvailableSlots(dayData, schedule);
+                state = slots.length > 0 ? "available" : "empty";
+            }
+        }
 
         cells.push({
             isoDate,
-            header: formatWeekdayHeader(current, schedule.timezone),
-            dayData,
-            isToday: isoDate === formatDateKey(referenceDate),
-            hasAvailability,
+            header: formatWeekdayHeader(isoDate, schedule.timezone),
+            isToday: isoDate === todayIso,
+            state,
+            slots,
         });
     }
 
     return cells;
 }
 
-export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
+export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorModalProps) {
     const router = useRouter();
     const closeButtonRef = useRef<HTMLButtonElement | null>(null);
     const alertShownRef = useRef(false);
@@ -216,7 +308,34 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
     const [fetchToken, setFetchToken] = useState(0);
 
     const dateRangeLabel = useMemo(() => formatRangeLabel(schedule), [schedule]);
-    const weekCells = useMemo(() => buildCurrentWeekCells(schedule), [schedule]);
+    const calendarCells = useMemo(() => buildCalendarCells(schedule), [schedule]);
+    const hasAvailableSlots = useMemo(
+        () => calendarCells.some((cell) => cell.state === "available" && cell.slots.length > 0),
+        [calendarCells]
+    );
+
+    const handleSlotSelection = useCallback(
+        (dayIso: string, slot: ProcessedSlot) => {
+            if (!doctor) return;
+
+            const payload: SlotSelection = {
+                doctor,
+                isoDate: dayIso,
+                time: slot.time,
+                timezone: schedule?.timezone ?? "",
+                dateTimeUtc: slot.dateTimeUtc.toISOString(),
+            };
+
+            if (onSlotSelect) {
+                onSlotSelect(payload);
+            } else {
+                router.push(`/doctor-profile/${doctor.id}?date=${dayIso}&time=${slot.time}`);
+            }
+
+            onClose();
+        },
+        [doctor, onClose, onSlotSelect, router, schedule]
+    );
 
     const fetchSchedule = useCallback(
         async (targetDoctor: Doctor) => {
@@ -252,14 +371,15 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                 setScheduleStatus("success");
             } catch (error) {
                 const status = (error as { status?: number } | null)?.status;
+                const isUnauthorized = status === 401 || status === 403;
 
-                const message =
-                    status === 401
-                        ? "Sessão expirada"
-                        : status === 404 || status === 422
-                        ? "Agenda indisponível para este médico."
-                        : "Falha ao carregar agenda.";
+                const message = isUnauthorized
+                    ? "Sessão expirada. Faça login novamente."
+                    : status === 404 || status === 422
+                    ? "Agenda indisponível para este médico."
+                    : "Não foi possível carregar a agenda. Tentar novamente.";
 
+                setSchedule(null);
                 setScheduleStatus("error");
                 setScheduleError({ message, status });
 
@@ -268,7 +388,7 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                     window.setTimeout(() => window.alert(message), 0);
                 }
 
-                if (status === 401) {
+                if (isUnauthorized) {
                     router.push(`/login?redirect=/medical-appointments`);
                 }
             }
@@ -321,7 +441,7 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
         }
 
         if (scheduleStatus === "error" && scheduleError) {
-            const canRetry = scheduleError.status !== 401;
+            const canRetry = scheduleError.status !== 401 && scheduleError.status !== 403;
             return (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                     <p>{scheduleError.message}</p>
@@ -342,15 +462,19 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
             return (
                 <div className="space-y-5" aria-live="polite">
                     {dateRangeLabel && (
-                        <p className="text-sm text-gray-500">Agenda disponível entre {dateRangeLabel}</p>
+                        <p className="text-sm text-gray-500">
+                            Agenda disponível entre {dateRangeLabel} (horários no fuso {schedule.timezone})
+                        </p>
                     )}
-                    {weekCells.length === 0 ? (
-                        <p className="text-sm text-gray-500">Agenda indisponível para esta semana.</p>
+                    {calendarCells.length === 0 ? (
+                        <p className="text-sm text-gray-500">Agenda indisponível para este período.</p>
                     ) : (
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {weekCells.map((cell) => {
-                                const dayData = cell.dayData;
-                                return (
+                        <>
+                            {!hasAvailableSlots && (
+                                <p className="text-sm text-gray-500">Sem horários disponíveis para este período.</p>
+                            )}
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {calendarCells.map((cell) => (
                                     <div
                                         key={cell.isoDate}
                                         className={`flex h-full flex-col rounded-2xl border bg-white p-4 shadow-sm transition ${
@@ -359,11 +483,9 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                                     >
                                         <div className="flex items-center justify-between gap-2">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-semibold text-gray-900">
-                                                    {cell.header}
-                                                </span>
+                                                <span className="text-sm font-semibold text-gray-900">{cell.header}</span>
                                                 <span className="text-[11px] uppercase tracking-wide text-gray-400">
-                                                    Semana atual
+                                                    {schedule.timezone}
                                                 </span>
                                             </div>
                                             {cell.isToday && (
@@ -373,34 +495,31 @@ export default function DoctorModal({ doctor, onClose }: DoctorModalProps) {
                                             )}
                                         </div>
                                         <div className="mt-3 flex-1">
-                                            {cell.hasAvailability && dayData ? (
+                                            {cell.state === "available" && cell.slots.length > 0 ? (
                                                 <div className="flex flex-wrap gap-2">
-                                                    {dayData.slots.map((slot) => {
-                                                        const past = isSlotPast(dayData, slot, schedule);
-                                                        return (
-                                                            <span
-                                                                key={`${cell.isoDate}-${slot}`}
-                                                                className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                                                                    past
-                                                                        ? "border-gray-200 bg-gray-100 text-gray-400"
-                                                                        : "border-[#D6E0FF] bg-[#F3F6FF] text-[#1E3D8F]"
-                                                                }`}
-                                                            >
-                                                                {slot}
-                                                            </span>
-                                                        );
-                                                    })}
+                                                    {cell.slots.map((slot) => (
+                                                        <button
+                                                            key={slot.key}
+                                                            type="button"
+                                                            onClick={() => handleSlotSelection(cell.isoDate, slot)}
+                                                            className="rounded-full border border-[#D6E0FF] bg-[#F3F6FF] px-3 py-1 text-xs font-medium text-[#1E3D8F] transition hover:border-[#5179EF] hover:bg-[#E6EDFF]"
+                                                        >
+                                                            {slot.time}
+                                                        </button>
+                                                    ))}
                                                 </div>
-                                            ) : dayData ? (
+                                            ) : cell.state === "blocked" ? (
+                                                <p className="text-sm text-gray-400">Agenda bloqueada.</p>
+                                            ) : cell.state === "empty" ? (
                                                 <p className="text-sm text-gray-400">Sem horários disponíveis.</p>
                                             ) : (
-                                                <p className="text-sm text-gray-400">Agenda não cadastrada para este dia.</p>
+                                                <p className="text-sm text-gray-400">Agenda não cadastrada.</p>
                                             )}
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
             );
