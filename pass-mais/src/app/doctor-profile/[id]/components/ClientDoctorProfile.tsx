@@ -24,6 +24,8 @@ interface ClientDoctorProfileProps {
     scheduleStatus: ScheduleStatus;
     scheduleError: string | null;
     onRetrySchedule: () => void;
+    initialDate?: string | null;
+    initialTime?: string | null;
 }
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
@@ -111,11 +113,14 @@ export default function ClientDoctorProfile({
     scheduleStatus,
     scheduleError,
     onRetrySchedule,
+    initialDate = null,
+    initialTime = null,
 }: ClientDoctorProfileProps) {
     const router = useRouter();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [forWhom, setForWhom] = useState<string>("self");
+    const [initialSelectionApplied, setInitialSelectionApplied] = useState(false);
 
     const sortedDays = useMemo(() => schedule?.days ?? [], [schedule]);
     const availableDays = useMemo(
@@ -129,9 +134,37 @@ export default function ClientDoctorProfile({
     const scheduleRangeLabel = useMemo(() => formatScheduleRange(schedule), [schedule]);
 
     useEffect(() => {
+        setInitialSelectionApplied(false);
+    }, [initialDate, initialTime]);
+
+    useEffect(() => {
         if (!schedule || availableDays.length === 0) {
             setSelectedDate(null);
             setSelectedTime(null);
+            setInitialSelectionApplied(false);
+            return;
+        }
+
+        if (!initialSelectionApplied) {
+            const preferredDate =
+                initialDate && availableDays.some((day) => day.isoDate === initialDate)
+                    ? initialDate
+                    : availableDays[0]?.isoDate ?? null;
+
+            setSelectedDate(preferredDate);
+
+            if (preferredDate && initialDate === preferredDate && initialTime) {
+                const day = availableDays.find((day) => day.isoDate === preferredDate);
+                if (day?.slots.includes(initialTime)) {
+                    setSelectedTime(initialTime);
+                } else {
+                    setSelectedTime(null);
+                }
+            } else {
+                setSelectedTime(null);
+            }
+
+            setInitialSelectionApplied(true);
             return;
         }
 
@@ -139,11 +172,27 @@ export default function ClientDoctorProfile({
             if (prev && availableDays.some((day) => day.isoDate === prev)) {
                 return prev;
             }
-            const first = availableDays[0]?.isoDate ?? null;
-            return first;
+            return availableDays[0]?.isoDate ?? null;
         });
-        setSelectedTime(null);
-    }, [schedule, availableDays]);
+    }, [schedule, availableDays, initialDate, initialTime, initialSelectionApplied]);
+
+    useEffect(() => {
+        if (!schedule || !selectedDate) {
+            setSelectedTime(null);
+            return;
+        }
+
+        const day = availableDays.find((item) => item.isoDate === selectedDate);
+        if (!day) {
+            setSelectedTime(null);
+            return;
+        }
+
+        setSelectedTime((prev) => {
+            if (!prev) return null;
+            return day.slots.includes(prev) ? prev : null;
+        });
+    }, [selectedDate, availableDays, schedule]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("pt-BR", {
