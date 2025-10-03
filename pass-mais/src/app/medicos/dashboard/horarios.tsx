@@ -1,7 +1,9 @@
 "use client";
 
 import { CalendarClock, Repeat, type LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { jsonPost } from "@/lib/api";
+import { extractDoctorIdFromToken } from "@/lib/token";
 
 const DEFAULT_SPECIFIC_SETTINGS = {
     appointmentInterval: 30,
@@ -46,6 +48,20 @@ type RecurringDaySchedule = {
 };
 
 type Mode = "specific" | "recurring";
+
+type SaveDoctorSchedulesResponse = {
+    message?: string;
+    mensagem?: string;
+    status?: string;
+    daysCount?: number;
+    slotsCount?: number;
+    updatedDays?: number;
+    savedSlots?: number;
+    daysSaved?: number;
+    slotsSaved?: number;
+    diasAtualizados?: number;
+    horariosSalvos?: number;
+};
 
 const MODE_OPTIONS: Array<{
     key: Mode;
@@ -327,6 +343,30 @@ export default function Horarios() {
         "Sábado": [],
         "Domingo": [],
     }));
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+    const [doctorId, setDoctorId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const stored = localStorage.getItem("doctorId");
+        if (stored) {
+            setDoctorId(stored);
+            return;
+        }
+
+        const token = localStorage.getItem("accessToken");
+        const derived = extractDoctorIdFromToken(token);
+        if (derived) {
+            setDoctorId(derived);
+            try {
+                localStorage.setItem("doctorId", derived);
+            } catch {
+                // ignore quota errors
+            }
+        }
+    }, []);
 
     const calendarDays = useMemo(() => getCalendarDays(currentMonth), [currentMonth]);
 
@@ -687,21 +727,105 @@ export default function Horarios() {
         });
     };
 
-    const handleSave = () => {
-        const payload = {
-            mode,
-            specific: {
-                settings: specificSettings,
-                days: specificSchedule,
-            },
-            recurring: {
-                settings: recurringSettings,
-                schedule: recurringSchedule,
-            },
-        };
-        console.log("Horários configurados:", payload);
-        if (typeof window !== "undefined") {
-            window.alert("Horários salvos com sucesso!");
+    const handleSave = async () => {
+        setSaveError(null);
+        setSaveSuccess(null);
+
+        const specificDaysPayload = Object.entries(specificSchedule).map(([isoDate, day]) => ({
+            isoDate,
+            slots: (day?.slots ?? []).map((slot) => ({
+                start: slot.start,
+                end: slot.end,
+                interval: slot.interval,
+            })),
+        }));
+
+        const recurringDaysPayload = ORDERED_DAYS.map((weekday) => {
+            const day = recurringSchedule[weekday];
+            return {
+                weekday,
+                enabled: day.enabled,
+                slots: day.slots.map((slot) => ({
+                    start: slot.start,
+                    end: slot.end,
+                })),
+            };
+        });
+
+        const hasSpecificConflicts = specificDaysPayload.some((day) => validateSlots(day.slots).length > 0);
+        const hasRecurringConflicts = recurringDaysPayload
+            .filter((day) => day.enabled)
+            .some((day) => validateSlots(day.slots).length > 0);
+
+        if (hasSpecificConflicts || hasRecurringConflicts) {
+            setSaveError("Resolva os conflitos de horários antes de salvar.");
+            return;
+        }
+
+        if (mode === "specific" && specificDaysPayload.length === 0) {
+            setSaveError("Configure ao menos um dia específico com horários para salvar.");
+            return;
+        }
+
+        if (
+            mode === "recurring" &&
+            !recurringDaysPayload.some((day) => day.enabled && day.slots.length > 0)
+        ) {
+            setSaveError("Ative ao menos um dia recorrente com horários disponíveis antes de salvar.");
+            return;
+        }
+
+        if (!doctorId) {
+            setSaveError("Não foi possível identificar o médico logado. Faça login novamente.");
+            return;
+        }
+
+        const schedulePayload = previewNextSevenDays
+            .map(({ isoDate, slotPreview, source, date }) => {
+                const normalizedSource =
+                    source === "specific" ? "SPECIFIC" : source === "recurring" ? "RECURRING" : "NONE";
+                const slots = normalizedSource === "NONE" ? [] : slotPreview;
+                return {
+                    isoDate,
+                    label: formatWeekdayPreview(date),
+                    source: normalizedSource,
+                    slots,
+                };
+            })
+            .filter((entry) => entry.source === "NONE" || entry.slots.length > 0);
+
+        if (schedulePayload.length === 0) {
+            setSaveError("Nenhum horário disponível para salvar.");
+            return;
+        }
+
+        try {
+            setIsSaving(true);
+            const response = await jsonPost<SaveDoctorSchedulesResponse>(
+                `/api/doctors/${doctorId}/schedule`,
+                schedulePayload
+            );
+            const feedback = response?.message || response?.mensagem || "Horários salvos com sucesso!";
+            const daysCount = response?.daysCount ?? response?.updatedDays ?? response?.daysSaved ?? response?.diasAtualizados;
+            const slotsCount = response?.slotsCount ?? response?.savedSlots ?? response?.slotsSaved ?? response?.horariosSalvos;
+            const details: string[] = [];
+            if (typeof daysCount === "number" && !Number.isNaN(daysCount)) {
+                details.push(`${daysCount} dia${daysCount === 1 ? "" : "s"}`);
+            }
+            if (typeof slotsCount === "number" && !Number.isNaN(slotsCount)) {
+                details.push(`${slotsCount} horário${slotsCount === 1 ? "" : "s"}`);
+            }
+            const summary = details.length > 0 ? ` (${details.join(" · ")})` : "";
+            setSaveSuccess(`${feedback}${summary}`);
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível salvar os horários. Tente novamente.";
+            console.error("Erro ao salvar horários:", error);
+            setSaveError(message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -1465,12 +1589,27 @@ export default function Horarios() {
                         <button
                             type="button"
                             onClick={handleSave}
-                            className="rounded-lg bg-black px-6 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
+                            disabled={isSaving}
+                            className="rounded-lg bg-black px-6 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-black"
                         >
-                            Salvar horários
+                            {isSaving ? "Salvando..." : "Salvar horários"}
                         </button>
                     </div>
                 </div>
+                {saveError && (
+                    <div className="border-t border-rose-100 bg-rose-50 px-8 py-4 text-sm text-rose-600" role="alert">
+                        {saveError}
+                    </div>
+                )}
+                {saveSuccess && (
+                    <div
+                        className="border-t border-emerald-100 bg-emerald-50 px-8 py-4 text-sm text-emerald-600"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        {saveSuccess}
+                    </div>
+                )}
                 <div className="border-t border-gray-200 px-8 py-6 text-sm text-gray-500 space-y-2">
                     <p>• Os horários serão aplicados para agendamentos futuros.</p>
                     <p>• Consultas já agendadas não serão afetadas.</p>

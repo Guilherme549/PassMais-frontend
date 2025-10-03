@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { jsonPost, setTokens } from "@/lib/api";
+import { extractDoctorIdFromToken } from "@/lib/token";
 
 // Tipos
 interface FormData {
@@ -19,8 +20,10 @@ interface AuthResponse {
   accessToken: string;
   refreshToken?: string;
   role?: string;
-  user?: { role?: string };
+  doctorId?: string;
+  user?: { role?: string; id?: string; doctorId?: string };
   roles?: string[];
+  userId?: string;
 }
 
 export default function LoginMedico() {
@@ -85,6 +88,23 @@ export default function LoginMedico() {
       }
 
       setTokens({ accessToken, refreshToken });
+
+      const explicitDoctorId =
+        data.doctorId ||
+        data.user?.doctorId ||
+        data.user?.id ||
+        data.userId;
+      let doctorId = explicitDoctorId ? String(explicitDoctorId) : null;
+      if (!doctorId) {
+        doctorId = extractDoctorIdFromToken(accessToken);
+      }
+      if (doctorId) {
+        try {
+          localStorage.setItem("doctorId", doctorId);
+        } catch {
+          // ignore quota errors
+        }
+      }
 
       const role = (data.role || data.user?.role || (Array.isArray(data.roles) ? data.roles[0] : undefined))?.toLowerCase();
       if (role) localStorage.setItem("role", role);
