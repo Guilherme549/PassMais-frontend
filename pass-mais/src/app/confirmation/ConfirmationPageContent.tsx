@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Doctor } from "@/app/medical-appointments/types";
 import { fallbackDoctors } from "@/app/medical-appointments/fallbackDoctors";
+import { normalizeImageUrl } from "@/lib/utils";
 
 export default function ConfirmationPageContent() {
     const router = useRouter();
@@ -240,10 +241,7 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
             bio: typeof raw.bio === "string" ? raw.bio : "",
             averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
             reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
-            photo:
-                typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
-                    ? raw.photoUrl
-                    : null,
+            photo: normalizeImageUrl(raw.photoUrl),
             clinicName,
             clinicStreetAndNumber,
             clinicCity,
