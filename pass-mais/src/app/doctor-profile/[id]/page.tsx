@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import ClientDoctorProfile from "./components/ClientDoctorProfile";
 import type { Doctor as DoctorSummary, DoctorSchedule } from "@/app/medical-appointments/types";
 import { fallbackDoctors } from "@/app/medical-appointments/fallbackDoctors";
+import { normalizeImageUrl } from "@/lib/utils";
 
 type ScheduleStatus = "idle" | "loading" | "success" | "error";
 
@@ -15,7 +16,18 @@ interface DoctorProfile extends DoctorSummary {
 export default function DoctorProfilePage() {
     const router = useRouter();
     const params = useParams<{ id: string }>();
+    const searchParams = useSearchParams();
     const doctorId = params?.id ?? "";
+
+    const { initialDate, initialTime } = useMemo(() => {
+        const dateValue = searchParams?.get("date") ?? null;
+        const timeValue = searchParams?.get("time") ?? null;
+
+        const validDate = dateValue && /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : null;
+        const validTime = timeValue && /^\d{2}:\d{2}$/.test(timeValue) ? timeValue : null;
+
+        return { initialDate: validDate, initialTime: validTime };
+    }, [searchParams]);
 
     const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -137,6 +149,8 @@ export default function DoctorProfilePage() {
             scheduleStatus={scheduleStatus}
             scheduleError={scheduleError}
             onRetrySchedule={() => loadSchedule(doctor.id, true)}
+            initialDate={initialDate}
+            initialTime={initialTime}
         />
     );
 }
@@ -166,10 +180,7 @@ function normalizeDoctors(data: unknown[]): DoctorSummary[] {
             bio: typeof raw.bio === "string" ? raw.bio : "",
             averageRating: typeof raw.averageRating === "number" ? raw.averageRating : 0,
             reviewsCount: typeof raw.reviewsCount === "number" ? raw.reviewsCount : 0,
-            photo:
-                typeof raw.photoUrl === "string" && raw.photoUrl.trim().length > 0
-                    ? raw.photoUrl
-                    : null,
+            photo: normalizeImageUrl(raw.photoUrl),
             clinicName:
                 typeof raw.clinicName === "string" && raw.clinicName.trim().length > 0
                     ? raw.clinicName
