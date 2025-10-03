@@ -3,6 +3,7 @@
 import NavBar from "@/components/NavBar";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { type Doctor } from "../types";
 import DoctorModal from "./DoctorModal";
@@ -219,6 +220,7 @@ export default function ClientMedicalAppointments({
   isLoading?: boolean;
   error?: string | null;
 }) {
+  const router = useRouter();
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [loadedDoctors, setLoadedDoctors] = useState<Doctor[] | null>(doctors);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[] | null>(doctors);
@@ -324,7 +326,13 @@ export default function ClientMedicalAppointments({
         </div>
       </div>
       {selectedDoctor && (
-        <DoctorModal doctor={selectedDoctor} onClose={handleCloseModal} />
+        <DoctorModal
+          doctor={selectedDoctor}
+          onClose={handleCloseModal}
+          onSlotSelect={({ doctor, isoDate, time }) => {
+            router.push(`/doctor-profile/${doctor.id}?date=${isoDate}&time=${time}`);
+          }}
+        />
       )}
       <footer className="m-[10px] h-[100px] flex flex-col items-center justify-center text-center text-gray-400 text-xs">
         © Pass+ {new Date().getFullYear()} Todos os direitos reservados.
