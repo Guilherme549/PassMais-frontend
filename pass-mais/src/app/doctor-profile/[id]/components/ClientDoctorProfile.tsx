@@ -11,6 +11,7 @@ import type {
     DoctorSchedule,
     DoctorScheduleDay,
 } from "@/app/medical-appointments/types";
+import { decodeAccessTokenPayload } from "@/lib/token";
 
 type ScheduleStatus = "idle" | "loading" | "success" | "error";
 
@@ -29,6 +30,7 @@ interface ClientDoctorProfileProps {
 }
 
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
+const REASON_MAX_LENGTH = 200;
 
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
     parts
@@ -121,17 +123,202 @@ export default function ClientDoctorProfile({
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [forWhom, setForWhom] = useState<string>("self");
     const [initialSelectionApplied, setInitialSelectionApplied] = useState(false);
+    const [patientName, setPatientName] = useState("");
+    const [cpf, setCpf] = useState("");
+    const [birthDate, setBirthDate] = useState("");
+    const [phone, setPhone] = useState("");
+    const [appointmentReason, setAppointmentReason] = useState("");
+    const [otherPatientName, setOtherPatientName] = useState("");
+    const [otherCpf, setOtherCpf] = useState("");
+    const [otherBirthDate, setOtherBirthDate] = useState("");
+    const [otherPhone, setOtherPhone] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<{
+        name?: string;
+        cpf?: string;
+        birthDate?: string;
+        phone?: string;
+        otherName?: string;
+        otherCpf?: string;
+        otherBirthDate?: string;
+        otherPhone?: string;
+    }>({});
+    const [formError, setFormError] = useState<string | null>(null);
+    const [tokenSynced, setTokenSynced] = useState(false);
 
-    const sortedDays = useMemo(() => schedule?.days ?? [], [schedule]);
+    const stripDigits = (value: string) => value.replace(/\D/g, "");
+    const normalizeComparable = (value: string) =>
+        value
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+
+    const formatCpf = (value: string) => {
+        const digits = stripDigits(value).slice(0, 11);
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 6) {
+            return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+        }
+        if (digits.length <= 9) {
+            return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+        }
+        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+    };
+
+    const formatPhone = (value: string) => {
+        const digits = stripDigits(value).slice(0, 11);
+        if (digits.length <= 2) return digits;
+        if (digits.length <= 7) {
+            return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+        }
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    };
+
+    useEffect(() => {
+        if (tokenSynced) return;
+        const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+        if (!token) {
+            setTokenSynced(true);
+            return;
+        }
+        const payload = decodeAccessTokenPayload(token);
+        if (!payload) {
+            setTokenSynced(true);
+            return;
+        }
+
+        const getString = (...keys: string[]) => {
+            for (const key of keys) {
+                const candidate = payload?.[key];
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed.length > 0) return trimmed;
+                }
+            }
+            return undefined;
+        };
+
+        if (!patientName) {
+            const resolvedName =
+                getString("fullName", "full_name", "name") ??
+                (() => {
+                    const given = getString("given_name", "givenName");
+                    const family = getString("family_name", "familyName");
+                    if (given && family) return `${given} ${family}`.trim();
+                    return undefined;
+                })();
+            if (resolvedName) {
+                setPatientName(resolvedName);
+            }
+        }
+
+        if (!cpf) {
+            const resolvedCpf = getString(
+                "cpf",
+                "taxId",
+                "tax_id",
+                "document",
+                "documentNumber",
+                "document_number"
+            );
+            if (resolvedCpf) {
+                setCpf(formatCpf(resolvedCpf));
+            }
+        }
+
+        if (!phone) {
+            const resolvedPhone = getString(
+                "phone",
+                "phoneNumber",
+                "phone_number",
+                "mobile",
+                "mobilePhone",
+                "mobile_phone",
+                "cellphone",
+                "cell_phone",
+                "contact",
+                "contactPhone",
+                "contact_phone"
+            );
+            if (resolvedPhone) {
+                setPhone(formatPhone(resolvedPhone));
+            }
+        }
+
+        if (!birthDate) {
+            const resolvedBirthRaw = getString(
+                "birthDate",
+                "birth_date",
+                "dateOfBirth",
+                "date_of_birth",
+                "dob"
+            );
+            if (resolvedBirthRaw) {
+                const normalized = (() => {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(resolvedBirthRaw)) return resolvedBirthRaw;
+                    if (/^\d{2}\/\d{2}\/\d{4}$/.test(resolvedBirthRaw)) {
+                        const [day, month, year] = resolvedBirthRaw.split("/");
+                        return `${year}-${month}-${day}`;
+                    }
+                    const parsed = new Date(resolvedBirthRaw);
+                    if (!Number.isNaN(parsed.getTime())) {
+                        const yy = parsed.getFullYear();
+                        const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+                        const dd = String(parsed.getDate()).padStart(2, "0");
+                        return `${yy}-${mm}-${dd}`;
+                    }
+                    return "";
+                })();
+                if (normalized) {
+                    setBirthDate(normalized);
+                }
+            }
+        }
+
+        setTokenSynced(true);
+    }, [tokenSynced, patientName, cpf, birthDate, phone]);
+
+    const upcomingDays = useMemo(() => {
+        const baseDays = schedule?.days ?? [];
+        if (!schedule) return baseDays;
+        return baseDays.filter((day) => day.slots.some((slot) => !isSlotPast(day, slot, schedule)));
+    }, [schedule]);
     const availableDays = useMemo(
-        () => sortedDays.filter((day) => !day.blocked && day.slots.length > 0),
-        [sortedDays]
+        () => upcomingDays.filter((day) => !day.blocked && day.slots.length > 0),
+        [upcomingDays]
     );
     const selectedDay = useMemo(
-        () => sortedDays.find((day) => day.isoDate === selectedDate) ?? null,
-        [sortedDays, selectedDate]
+        () => upcomingDays.find((day) => day.isoDate === selectedDate) ?? null,
+        [upcomingDays, selectedDate]
     );
     const scheduleRangeLabel = useMemo(() => formatScheduleRange(schedule), [schedule]);
+
+    const normalizedPatientNameComparable = useMemo(() => {
+        const value = patientName.trim();
+        return value.length > 0 ? normalizeComparable(value) : "";
+    }, [patientName]);
+
+    const normalizedOtherNameComparable = useMemo(() => {
+        const value = otherPatientName.trim();
+        return value.length > 0 ? normalizeComparable(value) : "";
+    }, [otherPatientName]);
+
+    const primaryCpfDigits = useMemo(() => stripDigits(cpf), [cpf]);
+    const primaryPhoneDigits = useMemo(() => stripDigits(phone), [phone]);
+    const otherCpfDigitsValue = useMemo(() => stripDigits(otherCpf), [otherCpf]);
+
+    const isOtherNameSameAsPatient =
+        forWhom === "other" &&
+        normalizedPatientNameComparable.length > 0 &&
+        normalizedOtherNameComparable.length > 0 &&
+        normalizedPatientNameComparable === normalizedOtherNameComparable;
+
+    const isOtherCpfSameAsPatient =
+        forWhom === "other" &&
+        otherCpfDigitsValue.length === 11 &&
+        primaryCpfDigits.length === 11 &&
+        otherCpfDigitsValue === primaryCpfDigits;
 
     useEffect(() => {
         setInitialSelectionApplied(false);
@@ -211,15 +398,180 @@ export default function ClientDoctorProfile({
     };
 
     const handleSubmit = () => {
-    if (!selectedDate || !selectedTime) {
-        alert("Por favor, selecione uma data e um horário.");
-        return;
-    }
+        if (!selectedDate || !selectedTime) {
+            alert("Por favor, selecione uma data e um horário.");
+            return;
+        }
 
-        // Redirecionar para a página de pagamento com os dados do agendamento
-        router.push(
-            `/payment?doctorId=${doctor.id}&date=${selectedDate}&time=${selectedTime}&forWhom=${forWhom}`
-        );
+        if (!schedule?.timezone) {
+            alert("Não foi possível identificar o fuso da agenda do médico.");
+            return;
+        }
+
+        const errors: {
+            name?: string;
+            cpf?: string;
+            birthDate?: string;
+            phone?: string;
+            otherName?: string;
+            otherCpf?: string;
+            otherBirthDate?: string;
+            otherPhone?: string;
+        } = {};
+        const normalizedName = patientName.trim();
+
+        if (normalizedName.length === 0) {
+            errors.name = "Informe o nome completo do paciente.";
+        }
+
+        if (primaryCpfDigits.length === 0) {
+            errors.cpf = "Informe o CPF do paciente.";
+        } else if (primaryCpfDigits.length !== 11) {
+            errors.cpf = "CPF inválido. É necessário informar 11 dígitos.";
+        }
+
+        if (!birthDate) {
+            errors.birthDate = "Informe a data de nascimento do paciente.";
+        } else {
+            const parsedBirth = new Date(`${birthDate}T00:00:00`);
+            if (Number.isNaN(parsedBirth.getTime())) {
+                errors.birthDate = "Data de nascimento inválida.";
+            } else {
+                const today = new Date();
+                let age = today.getFullYear() - parsedBirth.getFullYear();
+                const monthDiff = today.getMonth() - parsedBirth.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedBirth.getDate())) {
+                    age -= 1;
+                }
+                if (age < 18) {
+                    errors.birthDate =
+                        "Agendamentos para menores de 18 anos devem ser realizados por um responsável legal.";
+                }
+            }
+        }
+
+        if (primaryPhoneDigits.length === 0) {
+            errors.phone = "Informe um telefone de contato.";
+        } else if (primaryPhoneDigits.length < 10) {
+            errors.phone = "Telefone inválido. Informe DDD + número.";
+        }
+
+        let otherPatientNameValue: string | null = null;
+        let otherCpfDigits: string | null = null;
+        let otherBirthDateValue: string | null = null;
+        let otherPhoneDigits: string | null = null;
+
+        if (forWhom === "other") {
+            otherPatientNameValue = otherPatientName.trim();
+            otherCpfDigits = stripDigits(otherCpf);
+            otherBirthDateValue = otherBirthDate;
+            otherPhoneDigits = stripDigits(otherPhone);
+
+            if (otherPatientNameValue.length === 0) {
+                errors.otherName = "Informe o nome completo da pessoa que receberá a consulta.";
+            }
+            if (
+                otherPatientNameValue.length > 0 &&
+                normalizedName.length > 0 &&
+                normalizeComparable(otherPatientNameValue) === normalizeComparable(normalizedName)
+            ) {
+                errors.otherName =
+                    "O nome da pessoa que receberá a consulta deve ser diferente do titular da conta.";
+            }
+
+            if (!otherCpfDigits) {
+                errors.otherCpf = "Informe o CPF da pessoa que receberá a consulta.";
+            } else if (otherCpfDigits.length !== 11) {
+                errors.otherCpf = "CPF inválido. É necessário informar 11 dígitos.";
+            } else if (otherCpfDigits === primaryCpfDigits) {
+                errors.otherCpf =
+                    "O CPF da pessoa que receberá a consulta deve ser diferente do CPF informado nos dados principais.";
+            }
+
+            if (!otherBirthDateValue) {
+                errors.otherBirthDate = "Informe a data de nascimento da pessoa que receberá a consulta.";
+            } else {
+                const parsed = new Date(`${otherBirthDateValue}T00:00:00`);
+                if (Number.isNaN(parsed.getTime())) {
+                    errors.otherBirthDate = "Data de nascimento inválida.";
+                }
+            }
+
+            if (!otherPhoneDigits) {
+                errors.otherPhone = "Informe o telefone da pessoa que receberá a consulta.";
+            } else if (otherPhoneDigits.length < 10) {
+                errors.otherPhone = "Telefone inválido. Informe DDD + número.";
+            }
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setFieldErrors(errors);
+            setFormError("Revise as informações do paciente para continuar.");
+            return;
+        }
+
+        setFieldErrors({});
+        setFormError(null);
+
+        const trimmedReason = appointmentReason.trim();
+        const locationLabel = (() => {
+            const locationPieces: string[] = [];
+            if (doctor.clinicName) {
+                locationPieces.push(doctor.clinicName);
+            } else if (doctor.address) {
+                locationPieces.push(doctor.address);
+            }
+            const addressPieces = joinAddressParts(
+                doctor.clinicStreetAndNumber,
+                doctor.clinicCity,
+                doctor.clinicState,
+                doctor.clinicPostalCode
+            );
+            if (addressPieces.length > 0 && !locationPieces.includes(addressPieces)) {
+                locationPieces.push(addressPieces);
+            }
+            return locationPieces.join(" - ");
+        })();
+
+        const params = new URLSearchParams({
+            doctorId: doctor.id,
+            date: selectedDate,
+            time: selectedTime,
+            forWhom,
+            timezone: schedule.timezone,
+            patientName: normalizedName,
+            cpf: primaryCpfDigits,
+            birthDate,
+        });
+        if (locationLabel.length > 0) {
+            params.set("location", locationLabel);
+        }
+        if (typeof doctor.consultationFee === "number") {
+            params.set("consultationValue", String(doctor.consultationFee));
+        }
+        if (primaryPhoneDigits.length >= 10) {
+            params.set("phone", primaryPhoneDigits);
+        }
+
+        if (
+            forWhom === "other" &&
+            otherPatientNameValue &&
+            otherCpfDigits &&
+            otherBirthDateValue &&
+            otherPhoneDigits &&
+            otherPhoneDigits.length >= 10
+        ) {
+            params.set("otherPatientName", otherPatientNameValue);
+            params.set("otherPatientCpf", otherCpfDigits);
+            params.set("otherPatientBirthDate", otherBirthDateValue);
+            params.set("otherPatientPhone", otherPhoneDigits);
+        }
+
+        if (trimmedReason.length > 0) {
+            params.set("reason", trimmedReason);
+        }
+
+        router.push(`/payment?${params.toString()}`);
     };
 
     return (
@@ -320,7 +672,7 @@ export default function ClientDoctorProfile({
                                     <div>
                                         <label className="block text-gray-700 mb-2">Selecione a data:</label>
                                         <div className="flex flex-wrap gap-2">
-                                            {sortedDays.map((day) => {
+                                            {upcomingDays.map((day) => {
                                                 const hasSlots = !day.blocked && day.slots.length > 0;
                                                 return (
                                                     <button
@@ -376,6 +728,148 @@ export default function ClientDoctorProfile({
                     </div>
 
                     {/* Para quem será a consulta */}
+                    {forWhom !== "other" && (
+                        <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-200">
+                            <h3 className="text-2xl font-semibold text-gray-900 mb-4">Dados do paciente</h3>
+                            <p className="text-sm text-gray-500 mb-2">
+                                Informe ou confirme os dados pessoais do paciente para prosseguir com o agendamento.
+                            </p>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="flex flex-col">
+                                    <label htmlFor="patient-name" className="mb-2 text-gray-700">
+                                        Nome completo
+                                    </label>
+                                    <input
+                                        id="patient-name"
+                                        name="patient-name"
+                                        type="text"
+                                        value={patientName}
+                                        onChange={(event) => {
+                                            setPatientName(event.target.value);
+                                            setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                                            setFormError(null);
+                                        }}
+                                        placeholder="Nome completo do paciente"
+                                        className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                            fieldErrors.name ? "border-red-400" : "border-gray-300"
+                                        }`}
+                                    />
+                                    {fieldErrors.name && (
+                                        <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
+                                    )}
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="patient-cpf" className="mb-2 text-gray-700">
+                                        CPF
+                                    </label>
+                                    <input
+                                        id="patient-cpf"
+                                        name="patient-cpf"
+                                        type="text"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        value={cpf}
+                                        onChange={(event) => {
+                                            setCpf(formatCpf(event.target.value));
+                                            setFieldErrors((prev) => ({ ...prev, cpf: undefined }));
+                                            setFormError(null);
+                                        }}
+                                        placeholder="000.000.000-00"
+                                        maxLength={14}
+                                        className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                            fieldErrors.cpf ? "border-red-400" : "border-gray-300"
+                                        }`}
+                                    />
+                                    {fieldErrors.cpf && (
+                                        <p className="mt-1 text-sm text-red-600">{fieldErrors.cpf}</p>
+                                    )}
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="patient-phone" className="mb-2 text-gray-700">
+                                        Telefone
+                                    </label>
+                                    <input
+                                        id="patient-phone"
+                                        name="patient-phone"
+                                        type="tel"
+                                        inputMode="tel"
+                                        value={phone}
+                                        onChange={(event) => {
+                                            setPhone(formatPhone(event.target.value));
+                                            setFieldErrors((prev) => ({ ...prev, phone: undefined }));
+                                            setFormError(null);
+                                        }}
+                                        placeholder="(00) 00000-0000"
+                                        maxLength={16}
+                                        className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                            fieldErrors.phone ? "border-red-400" : "border-gray-300"
+                                        }`}
+                                    />
+                                    {fieldErrors.phone && (
+                                        <p className="mt-1 text-sm text-red-600">{fieldErrors.phone}</p>
+                                    )}
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="patient-birthdate" className="mb-2 text-gray-700">
+                                        Data de nascimento
+                                    </label>
+                                    <input
+                                        id="patient-birthdate"
+                                        name="patient-birthdate"
+                                        type="date"
+                                        value={birthDate}
+                                        onChange={(event) => {
+                                            setBirthDate(event.target.value);
+                                            setFieldErrors((prev) => ({ ...prev, birthDate: undefined }));
+                                            setFormError(null);
+                                        }}
+                                        className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                            fieldErrors.birthDate ? "border-red-400" : "border-gray-300"
+                                        }`}
+                                    />
+                                    {fieldErrors.birthDate && (
+                                        <p className="mt-1 text-sm text-red-600">{fieldErrors.birthDate}</p>
+                                    )}
+                                </div>
+                                <div className="flex flex-col md:col-span-2">
+                                    <label htmlFor="appointment-reason" className="mb-2 text-gray-700">
+                                        Motivo da consulta (opcional)
+                                    </label>
+                                    <textarea
+                                        id="appointment-reason"
+                                        name="appointment-reason"
+                                        value={appointmentReason}
+                                        onChange={(event) => {
+                                            setAppointmentReason(event.target.value);
+                                            setFormError(null);
+                                        }}
+                                        maxLength={REASON_MAX_LENGTH}
+                                        rows={4}
+                                        placeholder="Compartilhe o que motivou o agendamento, sintomas ou orientações adicionais."
+                                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                    />
+                                    <div className="mt-1 flex flex-col gap-1">
+                                        <p className="text-sm text-gray-500">
+                                            Essa informação é opcional e auxilia o médico a se preparar para a consulta.
+                                        </p>
+                                        <p
+                                            className={`text-xs ${
+                                                appointmentReason.length >= REASON_MAX_LENGTH
+                                                    ? "text-red-600"
+                                                    : "text-gray-500"
+                                            }`}
+                                        >
+                                            {appointmentReason.length >= REASON_MAX_LENGTH
+                                                ? `Você atingiu o limite de ${REASON_MAX_LENGTH} caracteres.`
+                                                : `Restam ${REASON_MAX_LENGTH - appointmentReason.length} caracteres.`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Para quem será a consulta */}
                     <div className="bg-white shadow-lg rounded-lg p-6 mb-6 border border-gray-200">
                         <h3 className="text-2xl font-semibold text-gray-900 mb-4">Para quem será a consulta?</h3>
                         <div className="space-y-4">
@@ -383,31 +877,191 @@ export default function ClientDoctorProfile({
                                 <label className="block text-gray-700 mb-2">Selecione uma opção:</label>
                                 <select
                                     value={forWhom}
-                                    onChange={(e) => setForWhom(e.target.value)}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        setForWhom(value);
+                                        setFieldErrors((prev) => ({
+                                            ...prev,
+                                            otherName: undefined,
+                                            otherCpf: undefined,
+                                            otherBirthDate: undefined,
+                                            otherPhone: undefined,
+                                        }));
+                                        setFormError(null);
+                                        if (value !== "other") {
+                                            setOtherPatientName("");
+                                            setOtherCpf("");
+                                            setOtherBirthDate("");
+                                            setOtherPhone("");
+                                        }
+                                    }}
                                     className="w-full max-w-md border border-gray-300 rounded-lg p-2"
                                 >
-                                    <option value="self">Para mim (Guilherme)</option>
+                                    <option value="self">
+                                        {patientName ? `Para mim (${patientName})` : "Para mim"}
+                                    </option>
                                     <option value="other">Outra pessoa</option>
                                 </select>
                             </div>
                             {forWhom === "other" && (
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Selecione a pessoa:</label>
-                                    <select
-                                        className="w-full max-w-md border border-gray-300 rounded-lg p-2"
-                                    >
-                                        <option value="" disabled>
-                                            Selecione uma pessoa
-                                        </option>
-                                        <option value="person1">João Silva (Dependente)</option>
-                                        <option value="person2">Maria Oliveira (Dependente)</option>
-                                    </select>
+                                <div className="space-y-4">
+                                    <p className="text-sm text-gray-500">
+                                        Informe os dados da pessoa que receberá a consulta.
+                                    </p>
+                                    <div className="grid gap-4 md:grid-cols-3">
+                                        <div className="flex flex-col md:col-span-3">
+                                            <label htmlFor="other-patient-name" className="mb-2 text-gray-700">
+                                                Nome completo
+                                            </label>
+                                            <input
+                                                id="other-patient-name"
+                                                name="other-patient-name"
+                                                type="text"
+                                                value={otherPatientName}
+                                                onChange={(event) => {
+                                                    setOtherPatientName(event.target.value);
+                                                    setFieldErrors((prev) => ({ ...prev, otherName: undefined }));
+                                                    setFormError(null);
+                                                }}
+                                                placeholder="Nome completo do paciente"
+                                                className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                                    fieldErrors.otherName ? "border-red-400" : "border-gray-300"
+                                                }`}
+                                            />
+                                            {fieldErrors.otherName ? (
+                                                <p className="mt-1 text-sm text-red-600">{fieldErrors.otherName}</p>
+                                            ) : isOtherNameSameAsPatient ? (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                    Utilize o campo acima apenas para o titular. Informe o nome da outra
+                                                    pessoa aqui.
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <label htmlFor="other-patient-cpf" className="mb-2 text-gray-700">
+                                                CPF
+                                            </label>
+                                            <input
+                                                id="other-patient-cpf"
+                                                name="other-patient-cpf"
+                                                type="text"
+                                                value={otherCpf}
+                                                onChange={(event) => {
+                                                    setOtherCpf(formatCpf(event.target.value));
+                                                    setFieldErrors((prev) => ({ ...prev, otherCpf: undefined }));
+                                                    setFormError(null);
+                                                }}
+                                                placeholder="000.000.000-00"
+                                                maxLength={14}
+                                                className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                                    fieldErrors.otherCpf ? "border-red-400" : "border-gray-300"
+                                                }`}
+                                            />
+                                            {fieldErrors.otherCpf && (
+                                                <p className="mt-1 text-sm text-red-600">{fieldErrors.otherCpf}</p>
+                                            )}
+                                            {!fieldErrors.otherCpf && isOtherCpfSameAsPatient && (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                    Informe um CPF diferente do cadastrado nos dados principais.
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <label htmlFor="other-patient-birthdate" className="mb-2 text-gray-700">
+                                                Data de nascimento
+                                            </label>
+                                            <input
+                                                id="other-patient-birthdate"
+                                                name="other-patient-birthdate"
+                                                type="date"
+                                                value={otherBirthDate}
+                                                onChange={(event) => {
+                                                    setOtherBirthDate(event.target.value);
+                                                    setFieldErrors((prev) => ({ ...prev, otherBirthDate: undefined }));
+                                                    setFormError(null);
+                                                }}
+                                                className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                                    fieldErrors.otherBirthDate ? "border-red-400" : "border-gray-300"
+                                                }`}
+                                            />
+                                            {fieldErrors.otherBirthDate && (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                    {fieldErrors.otherBirthDate}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <label htmlFor="other-patient-phone" className="mb-2 text-gray-700">
+                                                Telefone
+                                            </label>
+                                            <input
+                                                id="other-patient-phone"
+                                                name="other-patient-phone"
+                                                type="tel"
+                                                inputMode="tel"
+                                                value={otherPhone}
+                                                onChange={(event) => {
+                                                    setOtherPhone(formatPhone(event.target.value));
+                                                    setFieldErrors((prev) => ({ ...prev, otherPhone: undefined }));
+                                                    setFormError(null);
+                                                }}
+                                                placeholder="(00) 00000-0000"
+                                                maxLength={16}
+                                                className={`w-full rounded-lg border px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20 ${
+                                                    fieldErrors.otherPhone ? "border-red-400" : "border-gray-300"
+                                                }`}
+                                            />
+                                            {fieldErrors.otherPhone && (
+                                                <p className="mt-1 text-sm text-red-600">{fieldErrors.otherPhone}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <label htmlFor="appointment-reason" className="mb-2 text-gray-700">
+                                            Motivo da consulta (opcional)
+                                        </label>
+                                        <textarea
+                                            id="appointment-reason"
+                                            name="appointment-reason"
+                                            value={appointmentReason}
+                                            onChange={(event) => {
+                                                setAppointmentReason(event.target.value);
+                                                setFormError(null);
+                                            }}
+                                            maxLength={REASON_MAX_LENGTH}
+                                            rows={4}
+                                            placeholder="Compartilhe por que essa pessoa precisa da consulta."
+                                            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-gray-700 transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                        />
+                                        <div className="mt-1 flex flex-col gap-1">
+                                            <p className="text-sm text-gray-500">
+                                                Essa informação ajuda o médico a se preparar para o atendimento da outra
+                                                pessoa.
+                                            </p>
+                                            <p
+                                                className={`text-xs ${
+                                                    appointmentReason.length >= REASON_MAX_LENGTH
+                                                        ? "text-red-600"
+                                                        : "text-gray-500"
+                                                }`}
+                                            >
+                                                {appointmentReason.length >= REASON_MAX_LENGTH
+                                                    ? `Você atingiu o limite de ${REASON_MAX_LENGTH} caracteres.`
+                                                    : `Restam ${REASON_MAX_LENGTH - appointmentReason.length} caracteres.`}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {/* Botão Continuar */}
+                    {formError && (
+                        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                            {formError}
+                        </div>
+                    )}
                     <div className="flex justify-end">
                         <button
                             onClick={handleSubmit}
