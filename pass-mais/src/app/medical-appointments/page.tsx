@@ -114,6 +114,8 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 ? raw.clinicPostalCode.trim()
                 : serviceLocations[0]?.postalCode ?? null;
 
+        const acceptedInsurances = extractAcceptedInsurances(raw);
+
         normalized.push({
             id,
             name: typeof raw.name === "string" ? raw.name : "Nome não informado",
@@ -130,6 +132,7 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
             clinicPostalCode,
             consultationPrice:
                 typeof raw.consultationPrice === "number" ? raw.consultationPrice : null,
+            acceptedInsurances: acceptedInsurances.length > 0 ? acceptedInsurances : null,
             serviceLocations: serviceLocations.length > 0 ? serviceLocations : undefined,
             address: (() => {
                 const legacy =
@@ -157,6 +160,100 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
     }
 
     return normalized;
+}
+
+function extractAcceptedInsurances(source: Record<string, unknown>): string[] {
+    const candidateKeys = [
+        "acceptedInsurances",
+        "acceptedInsurance",
+        "healthPlans",
+        "healthPlan",
+        "healthPlanNames",
+        "healthInsurances",
+        "healthInsurance",
+        "insurancePlans",
+        "insurancePlan",
+        "insurances",
+        "insurance",
+        "agreements",
+        "agreement",
+        "convenios",
+        "convenio",
+    ];
+
+    const collected = new Set<string>();
+
+    const pushValues = (value: unknown) => {
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+            for (const entry of value) {
+                if (typeof entry === "string") {
+                    const normalized = entry.trim();
+                    if (normalized.length > 0) collected.add(normalized);
+                    continue;
+                }
+                if (entry && typeof entry === "object") {
+                    const rawEntry = entry as Record<string, unknown>;
+                    const candidate =
+                        typeof rawEntry.name === "string"
+                            ? rawEntry.name
+                            : typeof rawEntry.title === "string"
+                            ? rawEntry.title
+                            : typeof rawEntry.planName === "string"
+                            ? rawEntry.planName
+                            : typeof rawEntry.label === "string"
+                            ? rawEntry.label
+                            : typeof rawEntry.value === "string"
+                            ? rawEntry.value
+                            : null;
+                    if (candidate) {
+                        const normalized = candidate.trim();
+                        if (normalized.length > 0) collected.add(normalized);
+                    }
+                }
+            }
+            return;
+        }
+
+        if (typeof value === "string") {
+            const parts = value.split(/[,;|/]+/);
+            for (const part of parts) {
+                const normalized = part.trim();
+                if (normalized.length > 0) collected.add(normalized);
+            }
+            return;
+        }
+
+        if (value && typeof value === "object") {
+            const rawValue = value as Record<string, unknown>;
+            pushValues(rawValue.list ?? rawValue.items ?? rawValue.values);
+            const candidate =
+                typeof rawValue.name === "string"
+                    ? rawValue.name
+                    : typeof rawValue.title === "string"
+                    ? rawValue.title
+                    : typeof rawValue.planName === "string"
+                    ? rawValue.planName
+                    : typeof rawValue.label === "string"
+                    ? rawValue.label
+                    : typeof rawValue.value === "string"
+                    ? rawValue.value
+                    : null;
+            if (candidate) {
+                const normalized = candidate.trim();
+                if (normalized.length > 0) collected.add(normalized);
+            }
+        }
+    };
+
+    for (const key of candidateKeys) {
+        if (key in source) {
+            pushValues((source as Record<string, unknown>)[key]);
+        }
+    }
+
+    return Array.from(collected);
 }
 
 function extractServiceLocations(source: Record<string, unknown>): Doctor["serviceLocations"] {
