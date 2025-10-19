@@ -4,7 +4,7 @@ import NavBar from "@/components/NavBar";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type Doctor } from "../types";
 import DoctorModal from "./DoctorModal";
 import SearchBar from "./SearchBar";
@@ -224,6 +224,22 @@ export default function ClientMedicalAppointments({
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [loadedDoctors, setLoadedDoctors] = useState<Doctor[] | null>(doctors);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[] | null>(doctors);
+  const insuranceOptions = useMemo(() => {
+    if (!loadedDoctors) return [];
+
+    const collected = new Set<string>();
+    for (const doctor of loadedDoctors) {
+      if (!Array.isArray(doctor.acceptedInsurances)) continue;
+      for (const insurance of doctor.acceptedInsurances) {
+        if (typeof insurance !== "string") continue;
+        const trimmed = insurance.trim();
+        if (trimmed.length === 0) continue;
+        collected.add(trimmed);
+      }
+    }
+
+    return Array.from(collected).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [loadedDoctors]);
 
   useEffect(() => {
     setLoadedDoctors(doctors);
@@ -246,6 +262,7 @@ export default function ClientMedicalAppointments({
     const cityRegionInput = formData.get("city-region")?.toString().trim() || "";
     const explicitCity = formData.get("city")?.toString().trim() || "";
     const explicitState = formData.get("state")?.toString().trim() || "";
+    const insuranceInput = formData.get("health-insurance")?.toString().trim() || "";
 
     const parsedFromCityRegion = parseCityStateFromText(cityRegionInput);
     const desiredCity = explicitCity || parsedFromCityRegion.city || "";
@@ -254,14 +271,16 @@ export default function ClientMedicalAppointments({
     const normalizedCity = normalizeForSearch(desiredCity);
     const normalizedState = normalizeForSearch(desiredState);
     const normalizedSpecialty = normalizeForSearch(specialtyInput);
+    const normalizedInsurance = normalizeForSearch(insuranceInput);
     const hasLocationFilter = normalizedCity.length > 0 || normalizedState.length > 0;
+    const hasInsuranceFilter = normalizedInsurance.length > 0;
 
     if (!loadedDoctors) {
       setFilteredDoctors(null);
       return;
     }
 
-    // Filtra os médicos com base nos campos de especialidade e cidade
+    // Filtra os médicos com base nos campos de especialidade, convênio e cidade
     const filtered = loadedDoctors.filter((doctor) => {
       const doctorSpecialty = normalizeForSearch(doctor.specialty);
       const matchesSpecialty =
@@ -269,6 +288,16 @@ export default function ClientMedicalAppointments({
         doctorSpecialty.includes(normalizedSpecialty);
 
       if (!matchesSpecialty) return false;
+
+      const doctorInsurances = Array.isArray(doctor.acceptedInsurances)
+        ? doctor.acceptedInsurances
+        : [];
+
+      const matchesInsurance =
+        !hasInsuranceFilter ||
+        doctorInsurances.some((plan) => normalizeForSearch(plan).includes(normalizedInsurance));
+
+      if (!matchesInsurance) return false;
 
       if (!hasLocationFilter) return true;
 
@@ -306,7 +335,7 @@ export default function ClientMedicalAppointments({
             Encontre seu médico
           </h2>
           <div className="space-y-8">
-            <SearchBar onSubmit={handleSearch} />
+            <SearchBar onSubmit={handleSearch} insuranceOptions={insuranceOptions} />
             {isLoading ? (
               <p className="text-gray-600 text-lg">Carregando médicos...</p>
             ) : error ? (
