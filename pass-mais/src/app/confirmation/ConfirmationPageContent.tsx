@@ -22,6 +22,13 @@ export default function ConfirmationPageContent() {
     const time = searchParams.get("time");
     const forWhom = searchParams.get("forWhom");
     const paymentMethod = searchParams.get("paymentMethod");
+    const patientName = searchParams.get("patientName");
+    const patientCpf = searchParams.get("cpf");
+    const patientPhone = searchParams.get("phone");
+    const otherPatientName = searchParams.get("otherPatientName");
+    const otherPatientCpf = searchParams.get("otherPatientCpf");
+    const otherPatientBirthDate = searchParams.get("otherPatientBirthDate");
+    const otherPatientPhone = searchParams.get("otherPatientPhone");
 
     const [isReady, setIsReady] = useState(false);
     const [doctor, setDoctor] = useState<Doctor | null>(null);
@@ -124,6 +131,38 @@ export default function ConfirmationPageContent() {
                         <DetailRow label="Data" value={date ?? "-"} />
                         <DetailRow label="Horário" value={time ?? "-"} />
                         <DetailRow label="Para" value={formatForWhom(forWhom)} />
+                        {forWhom === "other" ? (
+                            <>
+                                <DetailRow label="Paciente" value={otherPatientName ?? "—"} />
+                                {otherPatientCpf ? (
+                                    <DetailRow label="CPF do Paciente" value={formatCpf(otherPatientCpf)} />
+                                ) : null}
+                                {otherPatientBirthDate ? (
+                                    <DetailRow
+                                        label="Nascimento do Paciente"
+                                        value={formatBirthDate(otherPatientBirthDate)}
+                                    />
+                                ) : null}
+                                {otherPatientPhone ? (
+                                    <DetailRow
+                                        label="Telefone do Paciente"
+                                        value={formatPhone(otherPatientPhone)}
+                                    />
+                                ) : null}
+                                <DetailRow
+                                    label="Titular do Agendamento"
+                                    value={patientName ?? "Não informado"}
+                                />
+                            </>
+                    ) : (
+                            <DetailRow label="Paciente" value={patientName ?? "-"} />
+                        )}
+                        {forWhom !== "other" && patientCpf ? (
+                            <DetailRow label="CPF do Paciente" value={formatCpf(patientCpf)} />
+                        ) : null}
+                        {patientPhone ? (
+                            <DetailRow label="Telefone de Contato" value={formatPhone(patientPhone)} />
+                        ) : null}
                         <DetailRow label="Método de Pagamento" value={formatPaymentMethod(paymentMethod)} />
                         <DetailRow
                             label="Local de atendimento"
@@ -180,6 +219,32 @@ function formatPaymentMethod(value: string | null): string {
     return value;
 }
 
+function formatCpf(value: string | null): string {
+    if (!value) return "—";
+    const digits = value.replace(/\D/g, "");
+    if (digits.length !== 11) return value;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatBirthDate(value: string | null): string {
+    if (!value) return "—";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split("-");
+        return `${day}/${month}/${year}`;
+    }
+    return value;
+}
+
+function formatPhone(value: string | null): string {
+    if (!value) return "—";
+    const digits = value.replace(/\D/g, "");
+    if (digits.length < 10) return value;
+    if (digits.length === 10) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 function buildAddressFallback(doctor: Doctor | null): string {
     if (!doctor) return "Endereço não informado";
     const composed = joinAddressParts(
@@ -233,6 +298,8 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
                 ? raw.clinicPostalCode.trim()
                 : serviceLocations[0]?.postalCode ?? null;
 
+        const acceptedInsurances = extractAcceptedInsurances(raw);
+
         normalized.push({
             id,
             name: typeof raw.name === "string" ? raw.name : "Nome não informado",
@@ -249,6 +316,7 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
             clinicPostalCode,
             consultationPrice:
                 typeof raw.consultationPrice === "number" ? raw.consultationPrice : null,
+            acceptedInsurances: acceptedInsurances.length > 0 ? acceptedInsurances : null,
             serviceLocations: serviceLocations.length > 0 ? serviceLocations : undefined,
             address: (() => {
                 const legacy =
@@ -276,6 +344,100 @@ function normalizeDoctors(data: unknown[]): Doctor[] {
     }
 
     return normalized;
+}
+
+function extractAcceptedInsurances(source: Record<string, unknown>): string[] {
+    const candidateKeys = [
+        "acceptedInsurances",
+        "acceptedInsurance",
+        "healthPlans",
+        "healthPlan",
+        "healthPlanNames",
+        "healthInsurances",
+        "healthInsurance",
+        "insurancePlans",
+        "insurancePlan",
+        "insurances",
+        "insurance",
+        "agreements",
+        "agreement",
+        "convenios",
+        "convenio",
+    ];
+
+    const collected = new Set<string>();
+
+    const pushValues = (value: unknown) => {
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+            for (const entry of value) {
+                if (typeof entry === "string") {
+                    const normalized = entry.trim();
+                    if (normalized.length > 0) collected.add(normalized);
+                    continue;
+                }
+                if (entry && typeof entry === "object") {
+                    const rawEntry = entry as Record<string, unknown>;
+                    const candidate =
+                        typeof rawEntry.name === "string"
+                            ? rawEntry.name
+                            : typeof rawEntry.title === "string"
+                            ? rawEntry.title
+                            : typeof rawEntry.planName === "string"
+                            ? rawEntry.planName
+                            : typeof rawEntry.label === "string"
+                            ? rawEntry.label
+                            : typeof rawEntry.value === "string"
+                            ? rawEntry.value
+                            : null;
+                    if (candidate) {
+                        const normalized = candidate.trim();
+                        if (normalized.length > 0) collected.add(normalized);
+                    }
+                }
+            }
+            return;
+        }
+
+        if (typeof value === "string") {
+            const parts = value.split(/[,;|/]+/);
+            for (const part of parts) {
+                const normalized = part.trim();
+                if (normalized.length > 0) collected.add(normalized);
+            }
+            return;
+        }
+
+        if (value && typeof value === "object") {
+            const rawValue = value as Record<string, unknown>;
+            pushValues(rawValue.list ?? rawValue.items ?? rawValue.values);
+            const candidate =
+                typeof rawValue.name === "string"
+                    ? rawValue.name
+                    : typeof rawValue.title === "string"
+                    ? rawValue.title
+                    : typeof rawValue.planName === "string"
+                    ? rawValue.planName
+                    : typeof rawValue.label === "string"
+                    ? rawValue.label
+                    : typeof rawValue.value === "string"
+                    ? rawValue.value
+                    : null;
+            if (candidate) {
+                const normalized = candidate.trim();
+                if (normalized.length > 0) collected.add(normalized);
+            }
+        }
+    };
+
+    for (const key of candidateKeys) {
+        if (key in source) {
+            pushValues((source as Record<string, unknown>)[key]);
+        }
+    }
+
+    return Array.from(collected);
 }
 
 function extractServiceLocations(source: Record<string, unknown>): Doctor["serviceLocations"] {
