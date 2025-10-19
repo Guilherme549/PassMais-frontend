@@ -19,6 +19,7 @@ export const fallbackDoctors: Doctor[] = [
         clinicState: "GO",
         clinicPostalCode: "75110-030",
         consultationPrice: 250,
+        acceptedInsurances: ["Unimed", "Bradesco Saúde", "Ipasgo"],
         serviceLocations: [
             {
                 name: "Clínica Bem-Estar",
@@ -45,6 +46,7 @@ export const fallbackDoctors: Doctor[] = [
         clinicState: "GO",
         clinicPostalCode: "74000-000",
         consultationPrice: 280,
+        acceptedInsurances: ["Amil", "SulAmérica Saúde"],
         serviceLocations: [
             {
                 name: "Clínica Coração Saudável",
@@ -71,6 +73,7 @@ export const fallbackDoctors: Doctor[] = [
         clinicState: "GO",
         clinicPostalCode: "74120-020",
         consultationPrice: 300,
+        acceptedInsurances: ["Hapvida", "Unimed"],
         serviceLocations: [
             {
                 name: "Clínica Pele & Saúde",
