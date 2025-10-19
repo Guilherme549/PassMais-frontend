@@ -18,6 +18,18 @@ export default function PaymentPageContent() {
     const date = searchParams.get("date");
     const time = searchParams.get("time");
     const forWhom = searchParams.get("forWhom");
+    const timezone = searchParams.get("timezone");
+    const reason = searchParams.get("reason");
+    const otherPatientName = searchParams.get("otherPatientName");
+    const otherPatientCpf = searchParams.get("otherPatientCpf");
+    const otherPatientBirthDate = searchParams.get("otherPatientBirthDate");
+    const patientName = searchParams.get("patientName");
+    const patientCpf = searchParams.get("cpf");
+    const patientBirthDate = searchParams.get("birthDate");
+    const patientPhone = searchParams.get("phone");
+    const otherPatientPhone = searchParams.get("otherPatientPhone");
+    const consultationValue = searchParams.get("consultationValue");
+    const location = searchParams.get("location");
 
     useEffect(() => {
         const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
@@ -27,15 +39,15 @@ export default function PaymentPageContent() {
             return;
         }
 
-        if (!doctorId || !date || !time || !forWhom) {
+        if (!doctorId || !date || !time || !forWhom || !timezone) {
             router.replace("/medical-appointments");
             return;
         }
 
         setIsReady(true);
-    }, [router, currentPath, doctorId, date, time, forWhom]);
+    }, [router, currentPath, doctorId, date, time, forWhom, timezone]);
 
-    if (!isReady || !doctorId || !date || !time || !forWhom) {
+    if (!isReady || !doctorId || !date || !time || !forWhom || !timezone) {
         return null;
     }
 
@@ -45,6 +57,18 @@ export default function PaymentPageContent() {
             date={date}
             time={time}
             forWhom={forWhom}
+            timezone={timezone}
+            reason={reason}
+            otherPatientName={otherPatientName}
+            otherPatientCpf={otherPatientCpf}
+            otherPatientBirthDate={otherPatientBirthDate}
+            patientName={patientName}
+            patientCpf={patientCpf}
+            patientBirthDate={patientBirthDate}
+            patientPhone={patientPhone}
+            otherPatientPhone={otherPatientPhone}
+            consultationValue={consultationValue}
+            location={location}
         />
     );
 }
