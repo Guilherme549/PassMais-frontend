@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,6 +47,13 @@ type WeekDayCell = {
     isToday: boolean;
     state: "available" | "empty" | "blocked" | "none";
     slots: ProcessedSlot[];
+};
+
+type CalendarPage = {
+    id: string;
+    title: string;
+    rangeLabel: string | null;
+    cells: WeekDayCell[];
 };
 
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
@@ -176,17 +183,6 @@ function buildSlotKey(isoDate: string, time: string) {
     return `${isoDate}T${time}`;
 }
 
-function getMondayIndex(date: Date) {
-    return (date.getDay() + 6) % 7;
-}
-
-function getWeekStart(date: Date) {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - getMondayIndex(start));
-    return start;
-}
-
 function formatWeekdayHeader(isoDate: string, timezone: string) {
     const reference = zonedTimeToUtc(isoDate, "12:00", timezone);
     const formatter = getFormatter(timezone, {
@@ -207,26 +203,6 @@ function formatIsoFromDate(date: Date, timezone: string) {
         day: "2-digit",
     });
     return formatter.format(date);
-}
-
-function getWeekdayIndexInTimezone(isoDate: string, timezone: string) {
-    const reference = zonedTimeToUtc(isoDate, "12:00", timezone);
-    const formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        weekday: "short",
-    });
-    const weekday = formatter.format(reference).toLowerCase();
-    const map: Record<string, number> = {
-        sun: 0,
-        mon: 1,
-        tue: 2,
-        wed: 3,
-        thu: 4,
-        fri: 5,
-        sat: 6,
-    };
-    const index = map[weekday] ?? 0;
-    return (index + 6) % 7; // transforma segunda-feira em índice 0
 }
 
 function shiftIsoDate(baseIso: string, amount: number, timezone: string) {
@@ -258,19 +234,64 @@ function collectAvailableSlots(day: DoctorScheduleDay, schedule: DoctorSchedule)
     return processedSlots;
 }
 
-function buildCalendarCells(schedule: DoctorSchedule | null): WeekDayCell[] {
-    if (!schedule) return [];
+function formatMonthTitle(cells: WeekDayCell[], timezone: string) {
+    const first = cells[0];
+    if (!first) return null;
+    const reference = zonedTimeToUtc(first.isoDate, "12:00", timezone);
+    const formatter = getFormatter(timezone, {
+        timeZone: timezone,
+        month: "long",
+        year: "numeric",
+    });
+    const formatted = formatter.format(reference);
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
 
-    const todayIso = formatDateKey(getTodayInTimezone(schedule.timezone));
-    const dayMap = new Map((schedule.days ?? []).map((day) => [day.isoDate, day]));
+function formatRangeSummary(cells: WeekDayCell[], timezone: string) {
+    if (cells.length === 0) return null;
+    const first = cells[0];
+    const last = cells[cells.length - 1];
+    const sameMonth = first.isoDate.slice(0, 7) === last.isoDate.slice(0, 7);
+    const startRef = zonedTimeToUtc(first.isoDate, "12:00", timezone);
+    const endRef = zonedTimeToUtc(last.isoDate, "12:00", timezone);
 
-    const weekdayIndex = getWeekdayIndexInTimezone(todayIso, schedule.timezone);
-    const weekStartIso = shiftIsoDate(todayIso, -weekdayIndex, schedule.timezone);
+    if (sameMonth) {
+        const dayFormatter = getFormatter(timezone, {
+            timeZone: timezone,
+            day: "2-digit",
+        });
+        const monthFormatter = getFormatter(timezone, {
+            timeZone: timezone,
+            month: "long",
+        });
+        const startDay = dayFormatter.format(startRef);
+        const endDay = dayFormatter.format(endRef);
+        const month = monthFormatter.format(startRef);
+        return `${startDay} – ${endDay} de ${month.charAt(0).toUpperCase() + month.slice(1)}`;
+    }
 
+    const fullFormatter = getFormatter(timezone, {
+        timeZone: timezone,
+        day: "2-digit",
+        month: "long",
+    });
+    const startLabel = fullFormatter.format(startRef);
+    const endLabel = fullFormatter.format(endRef);
+    const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+    return `${capitalize(startLabel)} – ${capitalize(endLabel)}`;
+}
+
+function buildCalendarCells(
+    schedule: DoctorSchedule,
+    startIso: string,
+    daysCount: number,
+    todayIso: string,
+    dayMap: Map<string, DoctorScheduleDay>
+): WeekDayCell[] {
     const cells: WeekDayCell[] = [];
 
-    for (let index = 0; index < 7; index += 1) {
-        const isoDate = shiftIsoDate(weekStartIso, index, schedule.timezone);
+    for (let index = 0; index < daysCount; index += 1) {
+        const isoDate = shiftIsoDate(startIso, index, schedule.timezone);
         const dayData = dayMap.get(isoDate) ?? null;
 
         let state: WeekDayCell["state"] = "none";
@@ -297,6 +318,35 @@ function buildCalendarCells(schedule: DoctorSchedule | null): WeekDayCell[] {
     return cells;
 }
 
+function buildCalendarPages(schedule: DoctorSchedule | null, pageSize = 7): CalendarPage[] {
+    if (!schedule) return [];
+
+    const todayIso = formatDateKey(getTodayInTimezone(schedule.timezone));
+    const dayMap = new Map((schedule.days ?? []).map((day) => [day.isoDate, day]));
+    const endIso = schedule.endDate ?? todayIso;
+
+    const pages: CalendarPage[] = [];
+    let pageIndex = 0;
+    let currentStartIso = todayIso;
+    const maxIterations = 52;
+
+    while (currentStartIso <= endIso && pageIndex < maxIterations) {
+        const cells = buildCalendarCells(schedule, currentStartIso, pageSize, todayIso, dayMap);
+        const title = formatMonthTitle(cells, schedule.timezone);
+        const rangeLabel = formatRangeSummary(cells, schedule.timezone);
+        pages.push({
+            id: `${currentStartIso}-${pageIndex}`,
+            title: title ?? "Próximas datas",
+            rangeLabel,
+            cells,
+        });
+        currentStartIso = shiftIsoDate(currentStartIso, pageSize, schedule.timezone);
+        pageIndex += 1;
+    }
+
+    return pages;
+}
+
 export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorModalProps) {
     const router = useRouter();
     const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -306,12 +356,15 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
     const [schedule, setSchedule] = useState<DoctorSchedule | null>(null);
     const [scheduleError, setScheduleError] = useState<{ message: string; status?: number } | null>(null);
     const [fetchToken, setFetchToken] = useState(0);
+    const [pageIndex, setPageIndex] = useState(0);
 
     const dateRangeLabel = useMemo(() => formatRangeLabel(schedule), [schedule]);
-    const calendarCells = useMemo(() => buildCalendarCells(schedule), [schedule]);
+    const calendarPages = useMemo(() => buildCalendarPages(schedule), [schedule]);
+    const currentPage = calendarPages[pageIndex] ?? null;
     const hasAvailableSlots = useMemo(
-        () => calendarCells.some((cell) => cell.state === "available" && cell.slots.length > 0),
-        [calendarCells]
+        () =>
+            (currentPage?.cells ?? []).some((cell) => cell.state === "available" && cell.slots.length > 0),
+        [currentPage]
     );
 
     const handleSlotSelection = useCallback(
@@ -347,6 +400,7 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
                 setSchedule(cache.data);
                 setScheduleStatus("success");
                 setScheduleError(null);
+                setPageIndex(0);
                 return;
             }
 
@@ -368,6 +422,7 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
                 });
 
                 setSchedule(normalized);
+                setPageIndex(0);
                 setScheduleStatus("success");
             } catch (error) {
                 const status = (error as { status?: number } | null)?.status;
@@ -401,6 +456,16 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
         setSchedule(null);
         fetchSchedule(doctor);
     }, [doctor, fetchSchedule, fetchToken]);
+
+    useEffect(() => {
+        setPageIndex(0);
+    }, [schedule?.doctorId, fetchToken]);
+
+    useEffect(() => {
+        if (pageIndex >= calendarPages.length) {
+            setPageIndex(calendarPages.length > 0 ? calendarPages.length - 1 : 0);
+        }
+    }, [calendarPages.length, pageIndex]);
 
     useEffect(() => {
         if (!doctor) return;
@@ -459,68 +524,122 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
         }
 
         if (scheduleStatus === "success" && schedule) {
+            const canGoPrev = pageIndex > 0;
+            const canGoNext = pageIndex < calendarPages.length - 1;
+
+            if (!currentPage) {
+                return (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                        Agenda indisponível para as próximas datas.
+                    </div>
+                );
+            }
+
             return (
                 <div className="space-y-5" aria-live="polite">
-                    {dateRangeLabel && (
-                        <p className="text-sm text-gray-500">
-                            Agenda disponível entre {dateRangeLabel} (horários no fuso {schedule.timezone})
-                        </p>
-                    )}
-                    {calendarCells.length === 0 ? (
-                        <p className="text-sm text-gray-500">Agenda indisponível para este período.</p>
-                    ) : (
-                        <>
-                            {!hasAvailableSlots && (
-                                <p className="text-sm text-gray-500">Sem horários disponíveis para este período.</p>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="space-y-1">
+                            {currentPage.title && (
+                                <h4 className="text-base font-semibold text-gray-900">{currentPage.title}</h4>
                             )}
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {calendarCells.map((cell) => (
-                                    <div
-                                        key={cell.isoDate}
-                                        className={`flex h-full flex-col rounded-2xl border bg-white p-4 shadow-sm transition ${
-                                            cell.isToday ? "border-[#5179EF] shadow-md" : "border-gray-200"
-                                        }`}
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-semibold text-gray-900">{cell.header}</span>
-                                                <span className="text-[11px] uppercase tracking-wide text-gray-400">
-                                                    {schedule.timezone}
-                                                </span>
-                                            </div>
-                                            {cell.isToday && (
-                                                <span className="rounded-full bg-[#5179EF]/10 px-3 py-1 text-[11px] font-semibold text-[#1E3D8F]">
-                                                    Hoje
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="mt-3 flex-1">
-                                            {cell.state === "available" && cell.slots.length > 0 ? (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {cell.slots.map((slot) => (
-                                                        <button
-                                                            key={slot.key}
-                                                            type="button"
-                                                            onClick={() => handleSlotSelection(cell.isoDate, slot)}
-                                                            className="rounded-full border border-[#D6E0FF] bg-[#F3F6FF] px-3 py-1 text-xs font-medium text-[#1E3D8F] transition hover:border-[#5179EF] hover:bg-[#E6EDFF]"
-                                                        >
-                                                            {slot.time}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            ) : cell.state === "blocked" ? (
-                                                <p className="text-sm text-gray-400">Agenda bloqueada.</p>
-                                            ) : cell.state === "empty" ? (
-                                                <p className="text-sm text-gray-400">Sem horários disponíveis.</p>
-                                            ) : (
-                                                <p className="text-sm text-gray-400">Agenda não cadastrada.</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+                            {currentPage.rangeLabel && (
+                                <p className="text-sm text-gray-500">{currentPage.rangeLabel}</p>
+                            )}
+                            {dateRangeLabel && (
+                                <p className="text-xs text-gray-400">
+                                    Agenda completa de {dateRangeLabel} · Fuso {schedule.timezone}
+                                </p>
+                            )}
+                        </div>
+                        {calendarPages.length > 1 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
+                                    disabled={!canGoPrev}
+                                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                                        canGoPrev
+                                            ? "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                                            : "border-gray-100 text-gray-300 cursor-not-allowed"
+                                    }`}
+                                    aria-label="Ver dias anteriores"
+                                >
+                                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                                    Anterior
+                                </button>
+                                <span className="text-xs font-medium text-gray-500">
+                                    Página {pageIndex + 1} de {calendarPages.length}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPageIndex((value) =>
+                                            Math.min(calendarPages.length - 1, value + 1)
+                                        )
+                                    }
+                                    disabled={!canGoNext}
+                                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                                        canGoNext
+                                            ? "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                                            : "border-gray-100 text-gray-300 cursor-not-allowed"
+                                    }`}
+                                    aria-label="Ver próximos dias"
+                                >
+                                    Próximos dias
+                                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                                </button>
                             </div>
-                        </>
+                        )}
+                    </div>
+                    {!hasAvailableSlots && (
+                        <p className="text-sm text-gray-500">Sem horários disponíveis para este período.</p>
                     )}
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {currentPage.cells.map((cell) => (
+                            <div
+                                key={cell.isoDate}
+                                className={`flex h-full flex-col rounded-2xl border bg-white p-4 shadow-sm transition ${
+                                    cell.isToday ? "border-[#5179EF] shadow-md" : "border-gray-200"
+                                }`}
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-semibold text-gray-900">{cell.header}</span>
+                                        <span className="text-[11px] uppercase tracking-wide text-gray-400">
+                                            {schedule.timezone}
+                                        </span>
+                                    </div>
+                                    {cell.isToday && (
+                                        <span className="rounded-full bg-[#5179EF]/10 px-3 py-1 text-[11px] font-semibold text-[#1E3D8F]">
+                                            Hoje
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-3 flex-1">
+                                    {cell.state === "available" && cell.slots.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {cell.slots.map((slot) => (
+                                                <button
+                                                    key={slot.key}
+                                                    type="button"
+                                                    onClick={() => handleSlotSelection(cell.isoDate, slot)}
+                                                    className="rounded-full border border-[#D6E0FF] bg-[#F3F6FF] px-3 py-1 text-xs font-medium text-[#1E3D8F] transition hover:border-[#5179EF] hover:bg-[#E6EDFF]"
+                                                >
+                                                    {slot.time}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : cell.state === "blocked" ? (
+                                        <p className="text-sm text-gray-400">Agenda bloqueada.</p>
+                                    ) : cell.state === "empty" ? (
+                                        <p className="text-sm text-gray-400">Sem horários disponíveis.</p>
+                                    ) : (
+                                        <p className="text-sm text-gray-400">Agenda não cadastrada.</p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             );
         }
