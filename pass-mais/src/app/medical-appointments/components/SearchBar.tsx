@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BriefcaseMedical, ChevronDown, MapPin, Search } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { BriefcaseMedical, ChevronDown, MapPin, Search, ShieldCheck } from "lucide-react";
 
 interface SearchBarProps {
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    insuranceOptions?: string[];
 }
 
 type CityOption = {
@@ -14,6 +15,30 @@ type CityOption = {
 
 const DEFAULT_CITY_VISIBLE = 5;
 const CITY_INCREMENT = 10;
+
+const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+
+const MAX_FILTERED_CITY_RESULTS = 60;
+
+type SearchableCity = CityOption & {
+    normalized: string;
+};
+
+function normalizeForSearchValue(value: string | null | undefined) {
+    if (!value) return "";
+    return value
+        .normalize("NFD")
+        .replace(DIACRITICS_REGEX, "")
+        .toLowerCase()
+        .trim();
+}
+
+function toSearchableCity(value: CityOption): SearchableCity {
+    return {
+        ...value,
+        normalized: normalizeForSearchValue(`${value.city} ${value.state}`),
+    };
+}
 
 const TOP_SPECIALTIES = [
     "Clínico Geral",
@@ -62,7 +87,43 @@ const ADDITIONAL_SPECIALTIES = [
 
 const ALL_SPECIALTIES = Array.from(new Set([...TOP_SPECIALTIES, ...ADDITIONAL_SPECIALTIES])).sort();
 
-export default function SearchBar({ onSubmit }: SearchBarProps) {
+const TOP_INSURANCES = [
+    "Unimed",
+    "Amil",
+    "Bradesco Saúde",
+    "SulAmérica Saúde",
+    "Hapvida",
+    "NotreDame Intermédica",
+    "Porto Saúde",
+    "Caixa Saúde",
+    "São Francisco Saúde",
+    "Prevent Senior",
+    "Ipasgo",
+];
+
+const ADDITIONAL_INSURANCES = [
+    "Allianz Saúde",
+    "Golden Cross",
+    "Omint Saúde",
+    "Notredame Easy",
+    "Santa Helena Saúde",
+    "Mediservice",
+    "Greenline Saúde",
+    "Cabesp",
+    "Aliança Saúde",
+    "BioVida Saúde",
+    "Sobam",
+    "Plena Saúde",
+    "Smile Saúde",
+    "Pame",
+    "Postal Saúde",
+];
+
+const DEFAULT_INSURANCES = Array.from(
+    new Set([...TOP_INSURANCES, ...ADDITIONAL_INSURANCES].map((item) => item.trim()).filter((item) => item.length > 0))
+).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+export default function SearchBar({ onSubmit, insuranceOptions }: SearchBarProps) {
     const containerRef = useRef<HTMLFormElement | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [specialtyQuery, setSpecialtyQuery] = useState("");
@@ -72,11 +133,14 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
     const [cityQuery, setCityQuery] = useState("");
     const [cityHighlightedIndex, setCityHighlightedIndex] = useState<number | null>(null);
     const [cityVisibleCount, setCityVisibleCount] = useState(DEFAULT_CITY_VISIBLE);
-    const [cities, setCities] = useState<CityOption[]>([]);
+    const [cities, setCities] = useState<SearchableCity[]>([]);
     const [cityLoading, setCityLoading] = useState(false);
     const [cityError, setCityError] = useState<string | null>(null);
     const [selectedCity, setSelectedCity] = useState<string | null>(null);
     const [selectedState, setSelectedState] = useState<string | null>(null);
+    const [insuranceQuery, setInsuranceQuery] = useState("");
+    const [insuranceOpen, setInsuranceOpen] = useState(false);
+    const [insuranceHighlightedIndex, setInsuranceHighlightedIndex] = useState<number | null>(null);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -87,6 +151,8 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                 setCityOpen(false);
                 setCityHighlightedIndex(null);
                 setCityVisibleCount(DEFAULT_CITY_VISIBLE);
+                setInsuranceOpen(false);
+                setInsuranceHighlightedIndex(null);
             }
         }
 
@@ -95,15 +161,39 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
     }, []);
 
     const filteredSpecialties = useMemo(() => {
-        const normalizedQuery = specialtyQuery.trim().toLowerCase();
-        const baseList = showAllSpecialties || normalizedQuery.length > 0 ? ALL_SPECIALTIES : TOP_SPECIALTIES;
+        const normalizedQuery = normalizeForSearchValue(specialtyQuery);
+        const baseList =
+            showAllSpecialties || normalizedQuery.length > 0 ? ALL_SPECIALTIES : TOP_SPECIALTIES;
 
         if (!normalizedQuery) {
             return baseList;
         }
 
-        return ALL_SPECIALTIES.filter((item) => item.toLowerCase().includes(normalizedQuery));
+        return ALL_SPECIALTIES.filter((item) =>
+            normalizeForSearchValue(item).includes(normalizedQuery)
+        );
     }, [showAllSpecialties, specialtyQuery]);
+
+    const availableInsurances = useMemo(() => {
+        const source =
+            insuranceOptions && insuranceOptions.length > 0
+                ? insuranceOptions
+                : DEFAULT_INSURANCES;
+
+        const normalized = source
+            .map((item) => (typeof item === "string" ? item.trim() : ""))
+            .filter((item) => item.length > 0);
+
+        return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }, [insuranceOptions]);
+
+    const filteredInsuranceOptions = useMemo(() => {
+        const query = insuranceQuery.trim().toLowerCase();
+        if (query.length === 0) {
+            return availableInsurances;
+        }
+        return availableInsurances.filter((item) => item.toLowerCase().includes(query));
+    }, [availableInsurances, insuranceQuery]);
 
     const handleSpecialtySelect = (value: string) => {
         setSpecialtyQuery(value);
@@ -115,6 +205,10 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (!isOpen && ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
             setIsOpen(true);
+            setCityOpen(false);
+            setCityHighlightedIndex(null);
+            setInsuranceOpen(false);
+            setInsuranceHighlightedIndex(null);
             return;
         }
 
@@ -175,23 +269,25 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                     return a.state.localeCompare(b.state, "pt-BR");
                 });
 
-                setCities(unique);
+                setCities(unique.map(toSearchableCity));
             } catch (error) {
                 console.error("Erro ao carregar municípios do IBGE", error);
                 if (!cancelled) {
                     setCityError("Não foi possível carregar todas as cidades. Mostrando opções populares.");
-                    setCities([
-                        { city: "São Paulo", state: "SP" },
-                        { city: "Rio de Janeiro", state: "RJ" },
-                        { city: "Brasília", state: "DF" },
-                        { city: "Salvador", state: "BA" },
-                        { city: "Fortaleza", state: "CE" },
-                        { city: "Belo Horizonte", state: "MG" },
-                        { city: "Curitiba", state: "PR" },
-                        { city: "Recife", state: "PE" },
-                        { city: "Porto Alegre", state: "RS" },
-                        { city: "Manaus", state: "AM" },
-                    ]);
+                    setCities(
+                        [
+                            { city: "São Paulo", state: "SP" },
+                            { city: "Rio de Janeiro", state: "RJ" },
+                            { city: "Brasília", state: "DF" },
+                            { city: "Salvador", state: "BA" },
+                            { city: "Fortaleza", state: "CE" },
+                            { city: "Belo Horizonte", state: "MG" },
+                            { city: "Curitiba", state: "PR" },
+                            { city: "Recife", state: "PE" },
+                            { city: "Porto Alegre", state: "RS" },
+                            { city: "Manaus", state: "AM" },
+                        ].map(toSearchableCity)
+                    );
                 }
             } finally {
                 if (!cancelled) setCityLoading(false);
@@ -204,15 +300,15 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         };
     }, []);
 
-    const filteredCities = useMemo(() => {
-        if (!cityQuery) return cities;
-        const normalized = cityQuery.trim().toLowerCase();
-        return cities.filter((option) =>
-            `${option.city} ${option.state}`.toLowerCase().includes(normalized)
-        );
-    }, [cities, cityQuery]);
+    const deferredCityQuery = useDeferredValue(cityQuery);
 
-    const handleCitySelect = (value: CityOption) => {
+    const filteredCities = useMemo(() => {
+        const normalizedQuery = normalizeForSearchValue(deferredCityQuery);
+        if (!normalizedQuery) return cities;
+        return cities.filter((option) => option.normalized.includes(normalizedQuery));
+    }, [cities, deferredCityQuery]);
+
+    const handleCitySelect = (value: SearchableCity) => {
         setCityQuery(`${value.city} - ${value.state}`);
         setCityOpen(false);
         setCityHighlightedIndex(null);
@@ -223,12 +319,22 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
 
     const hasCityQuery = cityQuery.trim().length > 0;
     const displayCities = hasCityQuery
-        ? filteredCities
+        ? filteredCities.slice(0, MAX_FILTERED_CITY_RESULTS)
         : filteredCities.slice(0, cityVisibleCount);
+
+    useEffect(() => {
+        if (cityHighlightedIndex != null && cityHighlightedIndex >= displayCities.length) {
+            setCityHighlightedIndex(displayCities.length > 0 ? displayCities.length - 1 : null);
+        }
+    }, [displayCities, cityHighlightedIndex]);
 
     const handleCityKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (!cityOpen && ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
             setCityOpen(true);
+            setIsOpen(false);
+            setHighlightedIndex(null);
+            setInsuranceOpen(false);
+            setInsuranceHighlightedIndex(null);
             return;
         }
 
@@ -262,6 +368,10 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
 
     const openCityDropdown = () => {
         setCityOpen(true);
+        setIsOpen(false);
+        setHighlightedIndex(null);
+        setInsuranceOpen(false);
+        setInsuranceHighlightedIndex(null);
         if (cityQuery.trim().length === 0) {
             setCityVisibleCount(DEFAULT_CITY_VISIBLE);
         }
@@ -294,6 +404,12 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         }
     }, [cityQuery, selectedCity, selectedState]);
 
+    const handleInsuranceSelect = (value: string) => {
+        setInsuranceQuery(value);
+        setInsuranceOpen(false);
+        setInsuranceHighlightedIndex(null);
+    };
+
     return (
         <div className="flex w-full px-1">
             <form
@@ -317,14 +433,31 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                             onChange={(event) => {
                                 setSpecialtyQuery(event.target.value);
                                 setIsOpen(true);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                                setInsuranceOpen(false);
+                                setInsuranceHighlightedIndex(null);
                             }}
-                            onFocus={() => setIsOpen(true)}
+                            onFocus={() => {
+                                setIsOpen(true);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                                setInsuranceOpen(false);
+                                setInsuranceHighlightedIndex(null);
+                            }}
                             onKeyDown={handleKeyDown}
                             className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-5 pr-10 text-base text-gray-600 shadow-sm outline-none transition focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 md:text-lg"
                         />
                         <button
                             type="button"
                             onClick={() => setIsOpen((prev) => !prev)}
+                            onFocusCapture={() => {
+                                setIsOpen(true);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                                setInsuranceOpen(false);
+                                setInsuranceHighlightedIndex(null);
+                            }}
                             className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
                             aria-label="Abrir lista de especialidades"
                         >
@@ -403,7 +536,9 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                                 setSelectedCity(null);
                                 setSelectedState(null);
                             }}
-                            onFocus={openCityDropdown}
+                            onFocus={() => {
+                                openCityDropdown();
+                            }}
                             onKeyDown={handleCityKeyDown}
                             className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-5 pr-10 text-base text-gray-600 shadow-sm outline-none transition focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 md:text-lg"
                         />
@@ -413,6 +548,11 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                                 if (cityOpen) {
                                     setCityOpen(false);
                                 } else {
+                                    openCityDropdown();
+                                }
+                            }}
+                            onFocusCapture={() => {
+                                if (!cityOpen) {
                                     openCityDropdown();
                                 }
                             }}
@@ -479,6 +619,150 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                                     {cityError && (
                                         <p className="mt-2 text-xs text-amber-600">{cityError}</p>
                                     )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Campo de Convênio */}
+                <div className="flex w-full flex-col">
+                    <label htmlFor="health-insurance" className="mb-2 text-lg text-gray-600 md:text-xl">
+                        Convênio:
+                    </label>
+                    <div className="relative">
+                        <input
+                            id="health-insurance"
+                            name="health-insurance"
+                            type="text"
+                            autoComplete="off"
+                            placeholder="nome do convênio"
+                            value={insuranceQuery}
+                            onChange={(event) => {
+                                setInsuranceQuery(event.target.value);
+                                setInsuranceOpen(true);
+                                setIsOpen(false);
+                                setHighlightedIndex(null);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                            }}
+                            onFocus={() => {
+                                setInsuranceOpen(true);
+                                setIsOpen(false);
+                                setHighlightedIndex(null);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                            }}
+                            onKeyDown={(event) => {
+                                if (!insuranceOpen && ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+                                    setInsuranceOpen(true);
+                                    setIsOpen(false);
+                                    setCityOpen(false);
+                                    setHighlightedIndex(null);
+                                    setCityHighlightedIndex(null);
+                                    return;
+                                }
+
+                                if (!insuranceOpen) return;
+
+                                if (event.key === "ArrowDown") {
+                                    event.preventDefault();
+                                    setInsuranceHighlightedIndex((prev) => {
+                                        if (prev == null) return 0;
+                                        return prev + 1 >= filteredInsuranceOptions.length ? 0 : prev + 1;
+                                    });
+                                }
+
+                                if (event.key === "ArrowUp") {
+                                    event.preventDefault();
+                                    setInsuranceHighlightedIndex((prev) => {
+                                        if (prev == null) return filteredInsuranceOptions.length - 1;
+                                        return prev - 1 < 0 ? filteredInsuranceOptions.length - 1 : prev - 1;
+                                    });
+                                }
+
+                                if (event.key === "Enter" && insuranceHighlightedIndex != null) {
+                                    event.preventDefault();
+                                    const option = filteredInsuranceOptions[insuranceHighlightedIndex];
+                                    if (option) {
+                                        handleInsuranceSelect(option);
+                                    }
+                                }
+                            }}
+                            className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-5 pr-10 text-base text-gray-600 shadow-sm outline-none transition focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 md:text-lg"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setInsuranceOpen((prev) => {
+                                const next = !prev;
+                                if (next) {
+                                    setIsOpen(false);
+                                    setHighlightedIndex(null);
+                                    setCityOpen(false);
+                                    setCityHighlightedIndex(null);
+                                } else {
+                                    setInsuranceHighlightedIndex(null);
+                                }
+                                return next;
+                            })}
+                            onFocusCapture={() => {
+                                setInsuranceOpen(true);
+                                setIsOpen(false);
+                                setHighlightedIndex(null);
+                                setCityOpen(false);
+                                setCityHighlightedIndex(null);
+                            }}
+                            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                            aria-label="Abrir lista de convênios"
+                        >
+                            <ChevronDown size={18} />
+                        </button>
+
+                        {insuranceOpen && (
+                            <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                                <ul className="max-h-72 overflow-y-auto py-2 text-sm text-gray-700">
+                                    {filteredInsuranceOptions.length === 0 && (
+                                        <li className="px-5 py-3 text-gray-400">Nenhum convênio encontrado.</li>
+                                    )}
+                                    {filteredInsuranceOptions.map((option, index) => {
+                                        const isHighlighted = index === insuranceHighlightedIndex;
+                                        return (
+                                            <li key={option}>
+                                                <button
+                                                    type="button"
+                                                    onMouseEnter={() => setInsuranceHighlightedIndex(index)}
+                                                    onMouseLeave={() => setInsuranceHighlightedIndex(null)}
+                                                    onClick={() => handleInsuranceSelect(option)}
+                                                    className={`flex w-full items-center justify-between px-5 py-3 text-left transition ${
+                                                        isHighlighted ? "bg-blue-50 text-blue-700" : "hover:bg-gray-50"
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-3">
+                                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-500">
+                                                            <ShieldCheck className="h-4 w-4" />
+                                                        </span>
+                                                        <span className="text-base font-medium">{option}</span>
+                                                    </span>
+                                                    <span className="text-xs uppercase tracking-wide text-gray-400">
+                                                        Convênio
+                                                    </span>
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                                <div className="border-t border-gray-100 bg-gray-50 px-5 py-2 text-center text-sm">
+                                    <button
+                                        type="button"
+                                        className="font-medium text-blue-600 hover:text-blue-700"
+                                        onClick={() => {
+                                            setInsuranceQuery("");
+                                            setInsuranceHighlightedIndex(null);
+                                            setInsuranceOpen(true);
+                                        }}
+                                    >
+                                        Todos os convênios
+                                    </button>
                                 </div>
                             </div>
                         )}
