@@ -12,6 +12,7 @@ import {
     Stethoscope,
     Star,
     Users,
+    Users2,
     Wallet,
     type LucideIcon,
 } from "lucide-react";
@@ -24,7 +25,8 @@ import Horarios from "../horarios";
 import MeusPacientes from "../meus-pacientes";
 import MinhaAgenda from "../minha-agenda";
 import Notificacoes from "../notificacoes";
-import VisaoGeral from "../visao-geral";
+import VisaoGeral, { type AppointmentDetail } from "../visao-geral";
+import DoctorTeamPage from "../team";
 
 type DashboardNavItem = {
     name: string;
@@ -76,6 +78,12 @@ const NAV_ITEMS: DashboardNavItem[] = [
         icon: CalendarClock,
         description: "Disponibilidades e bloqueios",
     },
+    {
+        name: "Equipe",
+        path: "team",
+        icon: Users2,
+        description: "Secretárias e códigos de convite",
+    },
     // {
     //     name: "Notificações",
     //     path: "notificacoes",
@@ -91,10 +99,201 @@ const NAV_ITEMS: DashboardNavItem[] = [
 ];
 
 // Dados fictícios (substitua por chamadas à API)
-const mockAppointments = [
-    { id: 1, patient: "Ana Oliveira", date: "2025-05-25", time: "09:00", status: "pendente" },
-    { id: 2, patient: "Carlos Souza", date: "2025-05-25", time: "10:30", status: "realizada" },
-    { id: 3, patient: "Mariana Lima", date: "2025-05-26", time: "14:00", status: "pendente" },
+const mockAppointments: AppointmentDetail[] = [
+    {
+        id: "apt-001",
+        scheduledAt: "2025-05-26T09:00:00-03:00",
+        status: "confirmada",
+        reason: "Acompanhamento de hipertensão arterial e revisão de exames",
+        symptomDuration: "2 semanas",
+        preConsultNotes: "Paciente relatou episódios de tontura nas manhãs e solicita avaliação de medicação atual.",
+        alerts: [
+            {
+                id: "alert-penicilina",
+                type: "alergia",
+                label: "Alergia grave a penicilina",
+                description: "Histórico de reação anafilática em 2018. Evitar beta-lactâmicos.",
+                severity: "alto",
+            },
+            {
+                id: "alert-hipertensao",
+                type: "risco",
+                label: "Hipertensa crônica",
+                description: "Mantém uso contínuo de anti-hipertensivo. Monitorar PA durante a consulta.",
+                severity: "moderado",
+            },
+        ],
+        medications: [
+            {
+                id: "med-losartana",
+                name: "Losartana",
+                dose: "50 mg",
+                form: "comprimido",
+                schedule: "1 comprimido pela manhã",
+                adherence: "alta",
+                updatedAt: "2025-05-20T09:00:00-03:00",
+                notes: "Paciente relata boa adesão e ausência de efeitos adversos.",
+            },
+        ],
+        exams: [
+            {
+                id: "lab-colesterol",
+                kind: "laboratorio",
+                exam: "Perfil lipídico - LDL",
+                date: "2025-05-18T08:00:00-03:00",
+                value: "165 mg/dL",
+                reference: "< 130 mg/dL",
+                highlight: "LDL acima do alvo para paciente hipertensa. Reforçar orientação dietética.",
+                abnormal: true,
+            },
+        ],
+        vaccines: [
+            {
+                id: "vac-influenza",
+                category: "Adulto com comorbidade crônica",
+                vaccine: "Influenza",
+                status: "atualizada",
+                date: "2025-03-10T10:00:00-03:00",
+            },
+            {
+                id: "vac-pneumo",
+                category: "Adulto com comorbidade crônica",
+                vaccine: "Pneumocócica 23V",
+                status: "pendente",
+            },
+        ],
+        patient: {
+            id: "pat-20394",
+            name: "Ana Oliveira",
+            birthDate: "1985-03-15",
+            gender: "Feminino",
+            email: "ana.oliveira@example.com",
+            emailMasked: false,
+            address: "Rua das Flores, 123 - São Paulo/SP",
+            addressMasked: true,
+        },
+    },
+    {
+        id: "apt-002",
+        scheduledAt: "2025-05-26T14:30:00-03:00",
+        status: "agendada",
+        reason: "Retorno para avaliação de dor lombar crônica",
+        symptomDuration: "5 meses",
+        preConsultNotes: "Paciente solicita liberação para atividade física de baixo impacto.",
+        alerts: [
+            {
+                id: "alert-antiinflamatorio",
+                type: "interacao",
+                label: "Interação com anti-inflamatório",
+                description: "Uso de anticoagulante oral. Evitar prescrição de AINE sem avaliação.",
+                severity: "moderado",
+            },
+        ],
+        medications: [
+            {
+                id: "med-varfarina",
+                name: "Varfarina",
+                dose: "5 mg",
+                form: "comprimido",
+                schedule: "1 comprimido ao anoitecer",
+                adherence: "media",
+                updatedAt: "2025-05-22T19:00:00-03:00",
+                notes: "Paciente relata duas doses esquecidas no último mês.",
+            },
+        ],
+        exams: [],
+        vaccines: [],
+        patient: {
+            id: "pat-11882",
+            name: "Carlos Souza",
+            birthDate: "1978-12-08",
+            gender: "Masculino",
+            email: "carlos.souza@example.com",
+            emailMasked: true,
+            address: "Rua do Lago, 45 - Campinas/SP",
+            addressMasked: true,
+        },
+    },
+    {
+        id: "apt-003",
+        scheduledAt: "2025-05-25T08:15:00-03:00",
+        status: "concluida",
+        reason: "Controle glicêmico trimestral",
+        symptomDuration: undefined,
+        preConsultNotes: "Consulta realizada conforme plano terapêutico. Ajuste de insulina ultrarrápida registrado.",
+        alerts: [
+            {
+                id: "alert-diabetes",
+                type: "risco",
+                label: "Diabetes tipo 2",
+                description: "Paciente com histórico de hipoglicemias matutinas. Manter monitoramento contínuo.",
+                severity: "moderado",
+            },
+        ],
+        medications: [
+            {
+                id: "med-insulina",
+                name: "Insulina Glargina",
+                dose: "18 UI",
+                form: "caneta",
+                schedule: "Aplicar 1 dose à noite",
+                adherence: "alta",
+                updatedAt: "2025-05-24T21:00:00-03:00",
+            },
+        ],
+        exams: [
+            {
+                id: "lab-hba1c",
+                kind: "laboratorio",
+                exam: "HbA1c",
+                date: "2025-05-20T07:30:00-03:00",
+                value: "7,6%",
+                reference: "< 7%",
+                highlight: "Acima da meta acordada. Reavaliar adesão alimentar.",
+                abnormal: true,
+            },
+        ],
+        vaccines: [
+            {
+                id: "vac-hepatite",
+                category: "Adulto com comorbidade crônica",
+                vaccine: "Hepatite B",
+                status: "pendente",
+            },
+        ],
+        patient: {
+            id: "pat-99172",
+            name: "Mariana Lima",
+            birthDate: "1990-07-22",
+            gender: "Feminino",
+            email: "mariana.lima@example.com",
+            emailMasked: false,
+            address: "Av. Central, 980 - Santos/SP",
+            addressMasked: false,
+        },
+    },
+    {
+        id: "apt-004",
+        scheduledAt: "2025-05-18T16:45:00-03:00",
+        status: "cancelada",
+        reason: "Avaliação de dor torácica leve",
+        symptomDuration: "3 dias",
+        preConsultNotes: "Consulta cancelada pelo paciente. Registrar tentativa de contato telefônico.",
+        alerts: [],
+        medications: [],
+        exams: [],
+        vaccines: [],
+        patient: {
+            id: "pat-56109",
+            name: "Lucas Fernandes",
+            birthDate: "1995-09-11",
+            gender: "Masculino",
+            email: "lucas.fernandes@example.com",
+            emailMasked: true,
+            address: "Rua Nova, 210 - São Paulo/SP",
+            addressMasked: true,
+        },
+    },
 ];
 
 const mockPatients = [
@@ -134,7 +333,7 @@ export default function MedicoDashboardSection() {
     useEffect(() => {
         const section = pathname.split("/").pop() || "visao-geral";
         setActiveSection(section);
-        if (!["visao-geral", "minha-agenda", "gerenciar-agendamentos", "meu-financeiro", "meus-pacientes", "meu-perfil-profissional", "horarios", "notificacoes", "avaliacoes-feedback"].includes(section)) {
+        if (!["visao-geral", "minha-agenda", "gerenciar-agendamentos", "meu-financeiro", "meus-pacientes", "meu-perfil-profissional", "horarios", "team", "notificacoes", "avaliacoes-feedback"].includes(section)) {
             router.push("/medicos/dashboard/visao-geral");
         }
     }, [pathname, router]);
@@ -201,6 +400,7 @@ export default function MedicoDashboardSection() {
                     {activeSection === "meus-pacientes" && <MeusPacientes patients={mockPatients} />}
                     {activeSection === "meu-perfil-profissional" && <MeuPerfilProfissional />}
                     {activeSection === "horarios" && <Horarios />}
+                    {activeSection === "team" && <DoctorTeamPage />}
                     {activeSection === "notificacoes" && <Notificacoes notifications={mockNotifications} />}
                     {activeSection === "avaliacoes-feedback" && <AvaliacoesFeedback reviews={mockReviews} />}
                 </div>
