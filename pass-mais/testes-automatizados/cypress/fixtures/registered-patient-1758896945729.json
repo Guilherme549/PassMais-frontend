@@ -1,0 +1,33 @@
+{
+  "fullName": "Vicente Moraes",
+  "firstName": "Vicente",
+  "lastName": "Moraes",
+  "email": "vicente_moraes@bol.com.br",
+  "password": "4%KnrxhULGv3",
+  "cpf": "562.166.146-06",
+  "rg": "60936889-5",
+  "phone": "(41) 973409-5707",
+  "landline": "(51) 3897-3981",
+  "dateOfBirth": "1962-06-25",
+  "gender": "Outro",
+  "address": {
+    "street": "Avenida Alice",
+    "number": "903",
+    "neighborhood": "Logan County",
+    "city": "Batista do Descoberto",
+    "state": "RJ",
+    "cep": "60397-687",
+    "country": "Brasil"
+  },
+  "healthPlan": "SulAmérica",
+  "healthPlanNumber": "967842030624",
+  "chronicConditions": [
+    "Hipertensão",
+    "Asma"
+  ],
+  "emergencyContact": {
+    "name": "Enzo Braga",
+    "relationship": "Cônjuge",
+    "phone": "(27) 974141-9997"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "fullName": "Arthur Barros",
+  "firstName": "Arthur",
+  "lastName": "Barros",
+  "email": "arthur_barros@bol.com.br",
+  "password": "Y3pcr1e6#UZS",
+  "cpf": "508.122.693-90",
+  "rg": "11617717-0",
+  "phone": "(11) 979793-5505",
+  "landline": "(41) 4803-5591",
+  "dateOfBirth": "1991-08-04",
+  "gender": "Feminino",
+  "address": {
+    "street": "Marginal Nogueira",
+    "number": "1363",
+    "complement": "Apt 2",
+    "neighborhood": "Lothian",
+    "city": "Enzo Gabriel de Nossa Senhora",
+    "state": "PR",
+    "cep": "71900-637",
+    "country": "Brasil"
+  },
+  "healthPlan": "NotreDame Intermédica",
+  "healthPlanNumber": "695584722626",
+  "emergencyContact": {
+    "name": "Samuel Oliveira",
+    "relationship": "Cônjuge",
+    "phone": "(71) 994982-8097"
+  }
+}
