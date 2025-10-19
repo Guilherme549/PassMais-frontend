@@ -14,6 +14,7 @@ export interface Doctor {
     clinicState?: string | null;
     clinicPostalCode?: string | null;
     consultationPrice?: number | null;
+    acceptedInsurances?: string[] | null;
     serviceLocations?: Array<{
         name: string | null;
         city: string | null;
