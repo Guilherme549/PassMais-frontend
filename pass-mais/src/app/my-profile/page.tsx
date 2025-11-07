@@ -33,7 +33,7 @@ export default async function MyProfile() {
     }
 
     const userProfile: UserProfile = {
-        name: "Guilherme",
+        name: "teste teste ",
         gender: "Masculino",
         birthDate: "12/12/1234",
         nickname: "editar para adicionar",
@@ -49,7 +49,7 @@ export default async function MyProfile() {
             rg: "não disponível",
         },
         contact: {
-            email: "guilherme@gmail.com",
+            email: "",
             phone: "(62)985247896",
             communicationPreference: "editar para adicionar",
         },
