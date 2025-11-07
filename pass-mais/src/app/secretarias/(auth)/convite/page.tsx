@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { Info } from "lucide-react";
+import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { setTokens } from "@/lib/api";
 
 type Mode = "register" | "login";
 
@@ -38,9 +41,16 @@ const INITIAL_LOGIN_STATE: LoginFormData = {
 };
 
 export default function SecretariaConvitePage() {
-    const [mode, setMode] = useState<Mode>("register");
+    const router = useRouter();
+    const [mode, setMode] = useState<Mode>("login");
     const [registerForm, setRegisterForm] = useState<RegisterFormData>(INITIAL_REGISTER_STATE);
     const [loginForm, setLoginForm] = useState<LoginFormData>(INITIAL_LOGIN_STATE);
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [loginError, setLoginError] = useState<string | null>(null);
+    const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+    const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
+    const [rememberLogin, setRememberLogin] = useState(false);
 
     const handleRegisterChange = (event: ChangeEvent<HTMLInputElement>) => {
         const { name, type, value, checked } = event.target;
@@ -65,9 +75,69 @@ export default function SecretariaConvitePage() {
         // TODO: Integrar com API de convites assim que disponível.
     };
 
-    const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        // TODO: Integrar com endpoint de autenticação das secretárias.
+        if (isLoggingIn) return;
+
+        const payload = {
+            email: loginForm.email.trim(),
+            password: loginForm.password,
+        };
+
+        setIsLoggingIn(true);
+        setLoginError(null);
+
+        try {
+            const response = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                if (response.status === 400 || response.status === 401) {
+                    setLoginError("E-mail ou senha inválidos. Verifique suas credenciais e tente novamente.");
+                } else {
+                    const fallbackMessage =
+                        data?.message ||
+                        data?.mensagem ||
+                        data?.error ||
+                        "Não foi possível acessar o painel. Tente novamente em instantes.";
+                    setLoginError(fallbackMessage);
+                }
+                return;
+            }
+
+            const accessToken = data?.accessToken as string | undefined;
+            const role = data?.role as string | undefined;
+
+            if (!accessToken || role !== "SECRETARY") {
+                setLoginError("Não foi possível validar seu acesso. Confirme se seus dados estão corretos.");
+                return;
+            }
+
+            try {
+                localStorage.setItem("passmais:accessToken", accessToken);
+                localStorage.setItem("accessToken", accessToken);
+                if (typeof data?.fullName === "string") {
+                    localStorage.setItem("passmais:fullName", data.fullName);
+                }
+                localStorage.setItem("passmais:role", role);
+                localStorage.setItem("role", role);
+            } catch {
+                // Continua fluxo mesmo se o storage falhar.
+            }
+
+            setTokens({ accessToken });
+
+            router.push("/secretarias/dashboard");
+        } catch {
+            setLoginError("Falha na conexão com o servidor. Tente novamente em alguns instantes.");
+        } finally {
+            setIsLoggingIn(false);
+        }
     };
 
     const canSubmitRegister =
@@ -192,16 +262,26 @@ export default function SecretariaConvitePage() {
                                         <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                                             Criar senha
                                         </Label>
-                                        <Input
-                                            id="password"
-                                            name="password"
-                                            type="password"
-                                            autoComplete="new-password"
-                                            placeholder="Mínimo 8 caracteres"
-                                            value={registerForm.password}
-                                            onChange={handleRegisterChange}
-                                            className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                id="password"
+                                                name="password"
+                                                type={showRegisterPassword ? "text" : "password"}
+                                                autoComplete="new-password"
+                                                placeholder="Mínimo 8 caracteres"
+                                                value={registerForm.password}
+                                                onChange={handleRegisterChange}
+                                                className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 pr-12 text-sm text-gray-700"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowRegisterPassword((prev) => !prev)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
+                                                aria-label={showRegisterPassword ? "Ocultar senha" : "Mostrar senha"}
+                                            >
+                                                {showRegisterPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="space-y-2">
                                         <Label
@@ -210,16 +290,28 @@ export default function SecretariaConvitePage() {
                                         >
                                             Confirmar senha
                                         </Label>
-                                        <Input
-                                            id="confirmPassword"
-                                            name="confirmPassword"
-                                            type="password"
-                                            autoComplete="new-password"
-                                            placeholder="Repita a senha"
-                                            value={registerForm.confirmPassword}
-                                            onChange={handleRegisterChange}
-                                            className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                id="confirmPassword"
+                                                name="confirmPassword"
+                                                type={showRegisterConfirmPassword ? "text" : "password"}
+                                                autoComplete="new-password"
+                                                placeholder="Repita a senha"
+                                                value={registerForm.confirmPassword}
+                                                onChange={handleRegisterChange}
+                                                className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 pr-12 text-sm text-gray-700"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowRegisterConfirmPassword((prev) => !prev)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
+                                                aria-label={
+                                                    showRegisterConfirmPassword ? "Ocultar confirmação de senha" : "Mostrar confirmação de senha"
+                                                }
+                                            >
+                                                {showRegisterConfirmPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -258,6 +350,11 @@ export default function SecretariaConvitePage() {
                             </form>
                         ) : (
                             <form className="space-y-6" onSubmit={handleLoginSubmit}>
+                                {loginError ? (
+                                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                                        {loginError}
+                                    </div>
+                                ) : null}
                                 <div className="space-y-2">
                                     <Label htmlFor="loginEmail" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                                         E-mail
@@ -270,6 +367,7 @@ export default function SecretariaConvitePage() {
                                         placeholder="seuemail@clinica.com"
                                         value={loginForm.email}
                                         onChange={handleLoginChange}
+                                        disabled={isLoggingIn}
                                         className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
                                     />
                                 </div>
@@ -277,21 +375,39 @@ export default function SecretariaConvitePage() {
                                     <Label htmlFor="loginPassword" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                                         Senha
                                     </Label>
-                                    <Input
-                                        id="loginPassword"
-                                        name="password"
-                                        type="password"
-                                        autoComplete="current-password"
-                                        placeholder="Digite sua senha"
-                                        value={loginForm.password}
-                                        onChange={handleLoginChange}
-                                        className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            id="loginPassword"
+                                            name="password"
+                                            type={showLoginPassword ? "text" : "password"}
+                                            autoComplete="current-password"
+                                            placeholder="Digite sua senha"
+                                            value={loginForm.password}
+                                            onChange={handleLoginChange}
+                                            disabled={isLoggingIn}
+                                            className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 pr-12 text-sm text-gray-700"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowLoginPassword((prev) => !prev)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600 disabled:text-gray-300"
+                                            aria-label={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
+                                            disabled={isLoggingIn}
+                                        >
+                                            {showLoginPassword ? <IoMdEye size={20} /> : <IoMdEyeOff size={20} />}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-col items-start justify-between gap-4 text-sm text-gray-600 md:flex-row md:items-center">
                                     <label className="flex items-center gap-2">
-                                        <input type="checkbox" className="h-4 w-4 rounded border border-gray-300 accent-black" />
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border border-gray-300 accent-black"
+                                            disabled={isLoggingIn}
+                                            checked={rememberLogin}
+                                            onChange={(event) => setRememberLogin(event.target.checked)}
+                                        />
                                         Manter-me conectada neste dispositivo
                                     </label>
                                     <Link
@@ -304,10 +420,10 @@ export default function SecretariaConvitePage() {
 
                                 <button
                                     type="submit"
-                                    disabled={!canSubmitLogin}
+                                    disabled={!canSubmitLogin || isLoggingIn}
                                     className="w-full rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
                                 >
-                                    Acessar painel
+                                    {isLoggingIn ? "Entrando..." : "Acessar painel"}
                                 </button>
                             </form>
                         )}

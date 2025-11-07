@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiFetch, jsonGet, jsonPost } from "@/lib/api";
 
@@ -17,7 +17,18 @@ export type JoinCode = {
     code: string;
     expiresAt: string | null;
     usesLeft: number;
-    status: "ativo" | "expirado" | "sem-usos" | "revogado" | string;
+    status:
+        | "ativo"
+        | "expirado"
+        | "sem-usos"
+        | "revogado"
+        | "bloqueado"
+        | "ACTIVE"
+        | "EXPIRED"
+        | "EXHAUSTED"
+        | "REVOKED"
+        | "BLOCKED"
+        | string;
     secretaryName?: string;
     secretaryEmail?: string;
 };
@@ -81,18 +92,20 @@ export function useDoctorTeam(): UseDoctorTeamReturn {
 }
 
 type GenerateJoinCodeResponse = {
-    id: string;
+    inviteId?: string;
     code: string;
     expiresAt: string | null;
-    usesLeft: number;
     status: string;
-    secretaryName?: string;
-    secretaryEmail?: string;
+    usesRemaining: number;
+    secretaryFullName?: string;
+    secretaryCorporateEmail?: string;
 };
 
 type GenerateJoinCodePayload = {
     fullName: string;
     email: string;
+    maxUses?: number;
+    expiresAt?: string;
 };
 
 export function useGenerateJoinCode(options: MutationOptions<GenerateJoinCodeResponse> = {}) {
@@ -110,9 +123,16 @@ export function useGenerateJoinCode(options: MutationOptions<GenerateJoinCodeRes
                     options.onError?.(validationError);
                     throw validationError;
                 }
-                const response = await jsonPost<GenerateJoinCodeResponse>("/api/doctor/team/join-codes", {
-                    fullName: payload.fullName.trim(),
-                    email: payload.email.trim(),
+                const uses = typeof payload.maxUses === "number" && Number.isFinite(payload.maxUses) ? payload.maxUses : 1;
+                const expiresAt =
+                    payload.expiresAt ??
+                    new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(); // fallback to 3h ahead if caller omits
+
+                const response = await jsonPost<GenerateJoinCodeResponse>("/api/teams/invite", {
+                    maxUses: uses,
+                    expiresAt,
+                    secretaryFullName: payload.fullName.trim(),
+                    secretaryCorporateEmail: payload.email.trim(),
                 });
                 options.onSuccess?.(response);
                 return response;
@@ -256,13 +276,27 @@ export function useMyDoctors() {
     return { data, isLoading, error, refetch: fetchDoctors };
 }
 
+export type AppointmentPatient = {
+    id: string;
+    name: string;
+    cpf: string;
+    birthDate?: string | null;
+    motherName?: string | null;
+    sex?: "Feminino" | "Masculino" | "Outro" | "Não informado" | null;
+    email?: string | null;
+    address?: string | null;
+    updatedAt?: string | null;
+};
+
 export type Appointment = {
     id: string;
-    patientName: string;
+    doctorId: string;
+    doctorName: string;
     scheduledAt: string;
     location: string;
-    status: string;
-    doctorId: string;
+    status: "agendada" | "confirmada" | "em-andamento" | "concluida" | "cancelada";
+    checkInAt: string | null;
+    patient: AppointmentPatient;
 };
 
 export type AppointmentFilters = {
@@ -279,36 +313,93 @@ export function useAppointments(filters: AppointmentFilters, options: { enabled?
     const [error, setError] = useState<Error | null>(null);
 
     const queryKey = useMemo(() => JSON.stringify(filters), [filters]);
+    const lastQueryKeyRef = useRef<string | null>(null);
 
-    const fetchAppointments = useCallback(async () => {
-        if (!enabled) {
-            setIsLoading(false);
-            return;
-        }
-        setIsLoading(true);
-        setError(null);
-        try {
-            const params = new URLSearchParams();
-            if (filters.doctorIds && filters.doctorIds.length > 0) {
-                filters.doctorIds.forEach((id) => params.append("doctorId", id));
-            } else if (filters.doctorId) {
-                params.append("doctorId", filters.doctorId);
+    const fetchAppointments = useCallback(
+        async (force = false) => {
+            if (!enabled) {
+                setIsLoading(false);
+                return;
             }
-            if (filters.from) params.append("from", filters.from);
-            if (filters.to) params.append("to", filters.to);
-            const response = await jsonGet<Appointment[]>(`/api/appointments?${params.toString()}`);
-            setData(response);
-        } catch (err) {
-            setError(err as Error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [enabled, filters]);
+
+            if (!force && lastQueryKeyRef.current === queryKey) {
+                setIsLoading(false);
+                return;
+            }
+
+            lastQueryKeyRef.current = queryKey;
+
+            setIsLoading(true);
+            setError(null);
+            try {
+                const params = new URLSearchParams();
+                if (filters.doctorIds && filters.doctorIds.length > 0) {
+                    filters.doctorIds.forEach((id) => params.append("doctorId", id));
+                } else if (filters.doctorId) {
+                    params.append("doctorId", filters.doctorId);
+                }
+                if (filters.from) params.append("from", filters.from);
+                if (filters.to) params.append("to", filters.to);
+                const response = await jsonGet<Appointment[]>(`/api/appointments?${params.toString()}`);
+                setData(response);
+            } catch (err) {
+                setError(err as Error);
+            } finally {
+                setIsLoading(false);
+            }
+        },
+        [enabled, filters, queryKey],
+    );
 
     useEffect(() => {
         if (!enabled) return;
-        void fetchAppointments();
+        void fetchAppointments(false);
     }, [enabled, fetchAppointments, queryKey]);
 
-    return { data, isLoading, error, refetch: fetchAppointments };
+    const refetch = useCallback(async () => {
+        lastQueryKeyRef.current = null;
+        await fetchAppointments(true);
+    }, [fetchAppointments]);
+
+    return { data, isLoading, error, refetch };
+}
+
+type ConfirmAttendancePayload = {
+    appointmentId: string;
+    fullName: string;
+    cpf: string;
+    birthDate: string;
+    motherName: string;
+    sex: AppointmentPatient["sex"];
+    email?: string | null;
+    address: string;
+};
+
+export function useConfirmAttendance(options: MutationOptions<Appointment> = {}) {
+    const [isPending, setIsPending] = useState(false);
+    const [error, setError] = useState<Error | null>(null);
+
+    const mutateAsync = useCallback(
+        async (payload: ConfirmAttendancePayload) => {
+            setIsPending(true);
+            setError(null);
+            try {
+                const { appointmentId, ...body } = payload;
+                const response = await jsonPost<Appointment>(`/api/appointments/${appointmentId}/check-in`, body);
+                options.onSuccess?.(response);
+                return response;
+            } catch (err) {
+                const errorInstance = err as Error;
+                setError(errorInstance);
+                options.onError?.(errorInstance);
+                throw errorInstance;
+            } finally {
+                setIsPending(false);
+                options.onSettled?.();
+            }
+        },
+        [options],
+    );
+
+    return { mutateAsync, isPending, error };
 }
