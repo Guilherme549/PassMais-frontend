@@ -8,7 +8,7 @@ import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setTokens } from "@/lib/api";
+import { jsonPost, setTokens, BASE_URL } from "@/lib/api";
 
 type Mode = "register" | "login";
 
@@ -46,7 +46,10 @@ export default function SecretariaConvitePage() {
     const [registerForm, setRegisterForm] = useState<RegisterFormData>(INITIAL_REGISTER_STATE);
     const [loginForm, setLoginForm] = useState<LoginFormData>(INITIAL_LOGIN_STATE);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [isRegistering, setIsRegistering] = useState(false);
     const [loginError, setLoginError] = useState<string | null>(null);
+    const [loginInfo, setLoginInfo] = useState<string | null>(null);
+    const [registerError, setRegisterError] = useState<string | null>(null);
     const [showRegisterPassword, setShowRegisterPassword] = useState(false);
     const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
     const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -54,6 +57,7 @@ export default function SecretariaConvitePage() {
 
     const handleRegisterChange = (event: ChangeEvent<HTMLInputElement>) => {
         const { name, type, value, checked } = event.target;
+        if (registerError) setRegisterError(null);
 
         setRegisterForm((prev) => ({
             ...prev,
@@ -63,6 +67,7 @@ export default function SecretariaConvitePage() {
 
     const handleLoginChange = (event: ChangeEvent<HTMLInputElement>) => {
         const { name, value } = event.target;
+        if (loginError) setLoginError(null);
 
         setLoginForm((prev) => ({
             ...prev,
@@ -70,52 +75,37 @@ export default function SecretariaConvitePage() {
         }));
     };
 
-    const handleRegisterSubmit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        // TODO: Integrar com API de convites assim que disponível.
-    };
+    type LoginAttemptResult = { success: true } | { success: false; message?: string };
 
-    const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        if (isLoggingIn) return;
-
-        const payload = {
-            email: loginForm.email.trim(),
-            password: loginForm.password,
-        };
-
-        setIsLoggingIn(true);
-        setLoginError(null);
-
+    const authenticateSecretary = async (email: string, password: string): Promise<LoginAttemptResult> => {
         try {
             const response = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ email, password }),
             });
 
             const data = await response.json().catch(() => ({}));
 
             if (!response.ok) {
-                if (response.status === 400 || response.status === 401) {
-                    setLoginError("E-mail ou senha inválidos. Verifique suas credenciais e tente novamente.");
-                } else {
-                    const fallbackMessage =
-                        data?.message ||
-                        data?.mensagem ||
-                        data?.error ||
-                        "Não foi possível acessar o painel. Tente novamente em instantes.";
-                    setLoginError(fallbackMessage);
-                }
-                return;
+                const fallbackMessage =
+                    (typeof data?.message === "string" && data.message) ||
+                    (typeof data?.mensagem === "string" && data.mensagem) ||
+                    (typeof data?.error === "string" && data.error) ||
+                    (response.status === 400 || response.status === 401
+                        ? "E-mail ou senha inválidos. Verifique suas credenciais e tente novamente."
+                        : "Não foi possível acessar o painel. Tente novamente em instantes.");
+                return { success: false, message: fallbackMessage };
             }
 
             const accessToken = data?.accessToken as string | undefined;
             const role = data?.role as string | undefined;
 
             if (!accessToken || role !== "SECRETARY") {
-                setLoginError("Não foi possível validar seu acesso. Confirme se seus dados estão corretos.");
-                return;
+                return {
+                    success: false,
+                    message: "Não foi possível validar seu acesso. Confirme se seus dados estão corretos.",
+                };
             }
 
             try {
@@ -127,17 +117,100 @@ export default function SecretariaConvitePage() {
                 localStorage.setItem("passmais:role", role);
                 localStorage.setItem("role", role);
             } catch {
-                // Continua fluxo mesmo se o storage falhar.
+                // Ignora falhas ao persistir credenciais.
             }
 
             setTokens({ accessToken });
-
-            router.push("/secretarias/dashboard");
+            return { success: true };
         } catch {
-            setLoginError("Falha na conexão com o servidor. Tente novamente em alguns instantes.");
-        } finally {
-            setIsLoggingIn(false);
+            return {
+                success: false,
+                message: "Falha na conexão com o servidor. Tente novamente em alguns instantes.",
+            };
         }
+    };
+
+    type JoinTeamResponse = {
+        message?: string;
+        role?: string;
+        linkedDoctor?: {
+            id: string;
+            name: string;
+        };
+    };
+
+    const handleRegisterSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (isRegistering) return;
+
+        const fullName = registerForm.fullName.trim();
+        const email = registerForm.email.trim();
+        const inviteCode = registerForm.inviteCode.trim();
+        const password = registerForm.password;
+
+        setIsRegistering(true);
+        setRegisterError(null);
+
+        try {
+            const joinResponse = await jsonPost<JoinTeamResponse>(
+                "/api/teams/join",
+                {
+                    inviteCode,
+                    email,
+                    password,
+                    name: fullName,
+                },
+                {
+                    rawUrl: `${BASE_URL}/api/teams/join`,
+                },
+            );
+
+            const loginResult = await authenticateSecretary(email, password);
+            if (loginResult.success) {
+                router.push("/secretarias/dashboard");
+                return;
+            }
+
+            setRegisterForm({ ...INITIAL_REGISTER_STATE });
+            setShowRegisterPassword(false);
+            setShowRegisterConfirmPassword(false);
+            setLoginForm((prev) => ({ ...prev, email, password: "" }));
+            setLoginError(null);
+            const successMessage =
+                joinResponse?.message ??
+                loginResult.message ??
+                "Conta criada com sucesso! Faça login com suas credenciais para continuar.";
+            setLoginInfo(successMessage);
+            setMode("login");
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Não foi possível concluir o cadastro. Tente novamente.";
+            setRegisterError(message);
+        } finally {
+            setIsRegistering(false);
+        }
+    };
+
+    const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (isLoggingIn) return;
+
+        const email = loginForm.email.trim();
+        const password = loginForm.password;
+
+        setIsLoggingIn(true);
+        setLoginInfo(null);
+        setLoginError(null);
+
+        const result = await authenticateSecretary(email, password);
+        if (!result.success) {
+            setLoginError(result.message || "Não foi possível acessar o painel. Tente novamente em instantes.");
+            setIsLoggingIn(false);
+            return;
+        }
+
+        setIsLoggingIn(false);
+        router.push("/secretarias/dashboard");
     };
 
     const canSubmitRegister =
@@ -149,6 +222,20 @@ export default function SecretariaConvitePage() {
         registerForm.consent;
 
     const canSubmitLogin = Boolean(loginForm.email.trim()) && Boolean(loginForm.password.trim());
+
+    const handleModeToggle = () => {
+        const nextMode = mode === "register" ? "login" : "register";
+        if (nextMode === "register") {
+            setLoginError(null);
+            setLoginInfo(null);
+        } else {
+            setRegisterError(null);
+            setRegisterForm({ ...INITIAL_REGISTER_STATE });
+            setShowRegisterPassword(false);
+            setShowRegisterConfirmPassword(false);
+        }
+        setMode(nextMode);
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#f7f8fc] via-white to-[#eef2ff] px-4 py-12">
@@ -201,7 +288,7 @@ export default function SecretariaConvitePage() {
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setMode((prev) => (prev === "register" ? "login" : "register"))}
+                                onClick={handleModeToggle}
                                 className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-300"
                             >
                                 {mode === "register" ? "Já tenho acesso" : "Quero me cadastrar"}
@@ -210,6 +297,11 @@ export default function SecretariaConvitePage() {
 
                         {mode === "register" ? (
                             <form className="space-y-6" onSubmit={handleRegisterSubmit}>
+                                {registerError ? (
+                                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                                        {registerError}
+                                    </div>
+                                ) : null}
                                 <div className="grid gap-5 md:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -342,10 +434,10 @@ export default function SecretariaConvitePage() {
 
                                 <button
                                     type="submit"
-                                    disabled={!canSubmitRegister}
+                                    disabled={!canSubmitRegister || isRegistering}
                                     className="w-full rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
                                 >
-                                    Ativar acesso seguro
+                                    {isRegistering ? "Ativando..." : "Ativar acesso seguro"}
                                 </button>
                             </form>
                         ) : (
@@ -353,6 +445,11 @@ export default function SecretariaConvitePage() {
                                 {loginError ? (
                                     <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
                                         {loginError}
+                                    </div>
+                                ) : null}
+                                {loginInfo ? (
+                                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                                        {loginInfo}
                                     </div>
                                 ) : null}
                                 <div className="space-y-2">
