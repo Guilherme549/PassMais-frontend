@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
     AlertTriangle,
     CalendarClock,
+    Check,
     CheckCircle2,
+    Copy,
     Loader2,
     Mail,
     Plus,
@@ -22,6 +24,8 @@ import {
     useRemoveMember,
     useRevokeJoinCode,
 } from "@/hooks/team";
+import { getAccessToken } from "@/lib/api";
+import { extractDoctorIdFromToken } from "@/lib/token";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -31,6 +35,13 @@ type Banner = {
     id: number;
     type: "success" | "error";
     message: string;
+};
+
+type InviteSuccessData = {
+    code: string;
+    expiresAt: string;
+    secretaryName: string;
+    secretaryEmail: string;
 };
 
 function formatDate(value: string) {
@@ -47,17 +58,40 @@ function formatDate(value: string) {
 }
 
 function formatStatusBadge(status: JoinCode["status"]) {
-    switch (status) {
+    const normalized = typeof status === "string" ? status.toLowerCase() : "";
+    switch (normalized) {
         case "ativo":
+        case "active":
             return { label: "Ativo", tone: "text-emerald-700 bg-emerald-100" };
         case "expirado":
+        case "expired":
             return { label: "Expirado", tone: "text-red-700 bg-red-100" };
         case "sem-usos":
+        case "exhausted":
             return { label: "Sem usos", tone: "text-amber-700 bg-amber-100" };
         case "revogado":
+        case "revoked":
             return { label: "Revogado", tone: "text-gray-600 bg-gray-200" };
+        case "bloqueado":
+        case "blocked":
+            return { label: "Bloqueado", tone: "text-red-700 bg-red-100" };
         default:
             return { label: status, tone: "text-gray-700 bg-gray-100" };
+    }
+}
+
+function formatDateTime(value: string) {
+    try {
+        const formatter = new Intl.DateTimeFormat("pt-BR", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+        return formatter.format(new Date(value));
+    } catch {
+        return value;
     }
 }
 
@@ -236,16 +270,120 @@ function InviteSecretaryModal({
     );
 }
 
+type InviteSuccessModalProps = {
+    open: boolean;
+    code: string;
+    secretaryName: string;
+    secretaryEmail: string;
+    expiresAt: string;
+    onClose: () => void;
+};
+
+function InviteSuccessModal({ open, code, secretaryName, secretaryEmail, expiresAt, onClose }: InviteSuccessModalProps) {
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        if (!open) {
+            setCopied(false);
+        }
+    }, [open]);
+
+    if (!open) return null;
+
+    const handleCopy = async () => {
+        try {
+            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(code);
+            } else {
+                throw new Error("Clipboard API indisponível");
+            }
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            setCopied(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
+                <div className="flex items-center gap-3 text-emerald-600">
+                    <CheckCircle2 className="h-6 w-6" />
+                    <h2 className="text-lg font-semibold text-gray-900">Código gerado com sucesso!</h2>
+                </div>
+                <p className="mt-2 text-sm text-gray-600">
+                    Compartilhe o código com a secretária informada. Ele estará válido apenas pelas próximas 3 horas.
+                </p>
+
+                <div className="mt-6 space-y-4">
+                    <div className="flex items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Código</p>
+                            <p className="mt-1 text-xl font-semibold text-gray-900">{code}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleCopy}
+                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900"
+                        >
+                            {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                            {copied ? "Copiado!" : "Copiar código"}
+                        </button>
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
+                        <p className="text-sm text-gray-600">
+                            <span className="font-semibold text-gray-900">Vinculado a:</span>{" "}
+                            {secretaryName} ({secretaryEmail})
+                        </p>
+                        <p className="text-sm text-gray-600">
+                            <span className="font-semibold text-gray-900">Expiração:</span>{" "}
+                            {expiresAt ? (
+                                <span>
+                                    {formatDateTime(expiresAt)}{" "}
+                                    <span className="block text-xs text-gray-400">{expiresAt}</span>
+                                </span>
+                            ) : (
+                                "Sem expiração definida"
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        <p className="font-semibold text-amber-900">Atenção!</p>
+                        <p className="mt-1 text-xs sm:text-sm">
+                            O código gerado está atrelado ao nome e e-mail informados. A secretária só poderá se cadastrar
+                            utilizando esses dados exatamente. Caso haja divergência, o vínculo não será criado.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
+                    >
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function DoctorTeamPage() {
     const { data, isLoading, error, refetch, isRefetching } = useDoctorTeam();
     const isBusy = isLoading || isRefetching;
     const [banners, setBanners] = useState<Banner[]>([]);
+    const [doctorId, setDoctorId] = useState<string | null>(null);
     const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
     const [codeToRevoke, setCodeToRevoke] = useState<JoinCode | null>(null);
     const [inviteModalOpen, setInviteModalOpen] = useState(false);
     const [inviteFullName, setInviteFullName] = useState("");
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteError, setInviteError] = useState<string | null>(null);
+    const [inviteSuccessData, setInviteSuccessData] = useState<InviteSuccessData | null>(null);
     const inviteFullNameTrimmed = inviteFullName.trim();
     const inviteEmailTrimmed = inviteEmail.trim();
     const canSubmitInvite = Boolean(inviteFullNameTrimmed) && CORPORATE_EMAIL_REGEX.test(inviteEmailTrimmed);
@@ -253,6 +391,48 @@ export default function DoctorTeamPage() {
     const pushBanner = (banner: Omit<Banner, "id">) => {
         setBanners((prev) => [...prev, { ...banner, id: Date.now() + Math.random() }]);
     };
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        let resolvedDoctorId: string | null = null;
+
+        try {
+            const storedId = window.localStorage.getItem("doctorId");
+            const trimmedStoredId = storedId?.trim();
+            if (trimmedStoredId) {
+                resolvedDoctorId = trimmedStoredId;
+            } else {
+                const storedToken =
+                    window.localStorage.getItem("accessToken") ??
+                    window.localStorage.getItem("passmais:accessToken") ??
+                    null;
+                const derived = extractDoctorIdFromToken(storedToken);
+                if (derived) {
+                    resolvedDoctorId = derived;
+                    try {
+                        window.localStorage.setItem("doctorId", derived);
+                    } catch {
+                        // ignore storage quota errors
+                    }
+                }
+            }
+        } catch {
+            // ignore storage access errors
+        }
+
+        if (!resolvedDoctorId) {
+            const fallbackToken = getAccessToken();
+            const derived = extractDoctorIdFromToken(fallbackToken);
+            if (derived) {
+                resolvedDoctorId = derived;
+            }
+        }
+
+        if (resolvedDoctorId) {
+            setDoctorId(resolvedDoctorId);
+        }
+    }, []);
 
     useEffect(() => {
         if (banners.length === 0) return;
@@ -289,10 +469,13 @@ export default function DoctorTeamPage() {
     });
 
     const { mutateAsync: removeMember, isPending: isRemovingMember } = useRemoveMember({
-        onSuccess: () => {
+        onSuccess: (result) => {
+            const fallbackMessage = memberToRemove?.fullName
+                ? `Acesso de ${memberToRemove.fullName} removido.`
+                : "Secretária removida. O acesso às suas agendas foi revogado imediatamente.";
             pushBanner({
                 type: "success",
-                message: "Secretária removida. O acesso às suas agendas foi revogado imediatamente.",
+                message: result?.message ?? fallbackMessage,
             });
             void refetch();
         },
@@ -332,7 +515,20 @@ export default function DoctorTeamPage() {
         }
 
         try {
-            const response = await generateJoinCode({ fullName: inviteFullNameTrimmed, email: inviteEmailTrimmed });
+            const expirationIso = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+            const response = await generateJoinCode({
+                fullName: inviteFullNameTrimmed,
+                email: inviteEmailTrimmed,
+                maxUses: 1,
+                expiresAt: expirationIso,
+            });
+            const expiresAt = response.expiresAt ?? expirationIso;
+            setInviteSuccessData({
+                code: response.code,
+                expiresAt,
+                secretaryName: response.secretaryFullName ?? inviteFullNameTrimmed,
+                secretaryEmail: response.secretaryCorporateEmail ?? inviteEmailTrimmed,
+            });
             pushBanner({
                 type: "success",
                 message: `Código ${response.code} gerado para ${inviteFullNameTrimmed}. Compartilhe com segurança.`,
@@ -351,8 +547,17 @@ export default function DoctorTeamPage() {
 
     const confirmRemoveMember = async () => {
         if (!memberToRemove) return;
+        const resolvedDoctorId = doctorId?.trim();
+        if (!resolvedDoctorId) {
+            pushBanner({
+                type: "error",
+                message:
+                    "Não foi possível identificar o médico autenticado. Faça login novamente antes de remover o acesso.",
+            });
+            return;
+        }
         try {
-            await removeMember(memberToRemove.id);
+            await removeMember({ doctorId: resolvedDoctorId, secretaryId: memberToRemove.id });
         } catch {
             // handled in hook
         }
@@ -618,6 +823,15 @@ export default function DoctorTeamPage() {
                 }}
                 onSubmit={handleInviteSubmit}
                 onClose={closeInviteModal}
+            />
+
+            <InviteSuccessModal
+                open={Boolean(inviteSuccessData)}
+                code={inviteSuccessData?.code ?? ""}
+                secretaryName={inviteSuccessData?.secretaryName ?? ""}
+                secretaryEmail={inviteSuccessData?.secretaryEmail ?? ""}
+                expiresAt={inviteSuccessData?.expiresAt ?? ""}
+                onClose={() => setInviteSuccessData(null)}
             />
 
             <ConfirmationModal
