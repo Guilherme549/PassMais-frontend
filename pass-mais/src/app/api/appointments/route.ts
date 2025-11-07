@@ -1,48 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-type MockAppointment = {
-  id: string;
-  patientName: string;
-  scheduledAt: string;
-  location: string;
-  status: string;
-  doctorId: string;
-};
-
-const MOCK_APPOINTMENTS: MockAppointment[] = [
-  {
-    id: "apt-001",
-    patientName: "Ana Oliveira",
-    scheduledAt: "2024-06-01T09:00:00-03:00",
-    location: "Clínica Vida Plena - Sala 3",
-    status: "confirmada",
-    doctorId: "doc-carlos",
-  },
-  {
-    id: "apt-002",
-    patientName: "Carlos Souza",
-    scheduledAt: "2024-06-01T11:30:00-03:00",
-    location: "Clínica Vida Plena - Sala 2",
-    status: "confirmada",
-    doctorId: "doc-carlos",
-  },
-  {
-    id: "apt-003",
-    patientName: "Beatriz Mendes",
-    scheduledAt: "2024-06-02T15:00:00-03:00",
-    location: "Hospital São Lucas - Consultório 5",
-    status: "pendente",
-    doctorId: "doc-joana",
-  },
-  {
-    id: "apt-004",
-    patientName: "Júlio Cesar",
-    scheduledAt: "2024-06-03T10:15:00-03:00",
-    location: "Hospital São Lucas - Consultório 7",
-    status: "confirmada",
-    doctorId: "doc-fernando",
-  },
-];
+import { getAppointmentsSnapshot } from "./mock-data";
 
 export async function GET(req: NextRequest) {
   const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
@@ -61,16 +19,22 @@ export async function GET(req: NextRequest) {
       const contentType = upstream.headers.get("content-type") || "application/json";
       const payload = await upstream.text();
 
-      return new Response(payload, {
-        status: upstream.status,
-        headers: { "content-type": contentType },
-      });
+      if (upstream.ok) {
+        return new Response(payload, {
+          status: upstream.status,
+          headers: { "content-type": contentType },
+        });
+      }
+
+      if (![401, 403, 404].includes(upstream.status)) {
+        return new Response(payload, {
+          status: upstream.status,
+          headers: { "content-type": contentType },
+        });
+      }
+      // Otherwise, fall back to local mock data (e.g., when missing auth)
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return new Response(
-        JSON.stringify({ message: "Proxy error", error: message }),
-        { status: 500, headers: { "content-type": "application/json" } }
-      );
+      // If the upstream request fails (network, timeout, etc.) fall back to mock data below
     }
   }
 
@@ -79,7 +43,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from") ?? null;
   const to = searchParams.get("to") ?? null;
 
-  const filtered = MOCK_APPOINTMENTS.filter((appointment) => {
+  const filtered = getAppointmentsSnapshot().filter((appointment) => {
     const matchesDoctor =
       doctorIds.length === 0 ? true : doctorIds.includes(appointment.doctorId);
 
