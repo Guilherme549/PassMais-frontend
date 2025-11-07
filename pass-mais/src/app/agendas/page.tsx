@@ -202,51 +202,59 @@ export default function SchedulesPage() {
                         </div>
                     ) : (
                         <ul className="mt-6 space-y-4">
-                            {appointments.map((appointment) => (
-                                <li
-                                    key={appointment.id}
-                                    className="rounded-2xl border border-gray-200 p-5 transition hover:border-gray-300"
-                                >
-                                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                                        <div className="flex flex-col gap-1">
-                                            <p className="text-sm font-semibold text-gray-900">
-                                                Paciente: {appointment.patientName}
-                                            </p>
-                                            <p className="text-xs text-gray-500">
-                                                Data/Hora:{" "}
-                                                {new Intl.DateTimeFormat("pt-BR", {
-                                                    day: "2-digit",
-                                                    month: "long",
-                                                    year: "numeric",
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                }).format(new Date(appointment.scheduledAt))}
-                                            </p>
-                                            <p className="flex items-center gap-2 text-xs text-gray-400">
-                                                <MapPin className="h-4 w-4" />
-                                                {appointment.location}
-                                            </p>
-                                            <span className="mt-1 inline-flex w-fit items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
-                                                Status: {appointment.status}
-                                            </span>
+                            {appointments.map((appointment) => {
+                                const formattedDate = new Intl.DateTimeFormat("pt-BR", {
+                                    day: "2-digit",
+                                    month: "long",
+                                    year: "numeric",
+                                }).format(new Date(appointment.scheduledAt));
+                                const formattedTime = new Intl.DateTimeFormat("pt-BR", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                }).format(new Date(appointment.scheduledAt));
+
+                                return (
+                                    <li
+                                        key={appointment.id}
+                                        className="rounded-2xl border border-gray-200 p-5 transition hover:border-gray-300"
+                                    >
+                                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-semibold text-gray-900">
+                                                    Paciente: {appointment.patient.name}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Médico: {appointment.doctorName}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Data/Hora: {formattedDate} às {formattedTime}
+                                                </p>
+                                                <p className="flex items-center gap-2 text-xs text-gray-400">
+                                                    <MapPin className="h-4 w-4" />
+                                                    {appointment.location}
+                                                </p>
+                                                <span className="mt-1 inline-flex w-fit items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
+                                                    Status: {appointment.status}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800"
+                                                >
+                                                    Confirmar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800"
+                                                >
+                                                    Remarcar
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800"
-                                            >
-                                                Confirmar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800"
-                                            >
-                                                Remarcar
-                                            </button>
-                                        </div>
-                                    </div>
-                                </li>
-                            ))}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </section>
