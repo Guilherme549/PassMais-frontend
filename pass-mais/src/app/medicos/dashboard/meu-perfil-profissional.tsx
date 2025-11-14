@@ -15,12 +15,9 @@ type ProfessionalInfo = {
     clinic_postal_code: string;
     consultation_price: string;
     phone: string;
-    secretaryFullName: string;
-    secretaryEmail: string;
-    secretaryConsent: boolean;
 };
 
-type EditableField = Exclude<keyof ProfessionalInfo, "secretaryConsent">;
+type EditableField = keyof ProfessionalInfo;
 
 const DEFAULT_PROFESSIONAL_INFO: ProfessionalInfo = {
     fullName: "Dr. Carlos Mendes",
@@ -33,9 +30,6 @@ const DEFAULT_PROFESSIONAL_INFO: ProfessionalInfo = {
     clinic_postal_code: "01310-100",
     consultation_price: "R$ 250,00",
     phone: "(11) 91234-5678",
-    secretaryFullName: "",
-    secretaryEmail: "",
-    secretaryConsent: false,
 };
 
 export default function MeuPerfilProfissional() {
@@ -48,15 +42,6 @@ export default function MeuPerfilProfissional() {
         setProfessionalInfo((prev) => ({
             ...prev,
             [field]: value,
-        }));
-    };
-
-    const handleConsentChange = (event: ChangeEvent<HTMLInputElement>) => {
-        const { checked } = event.target;
-
-        setProfessionalInfo((prev) => ({
-            ...prev,
-            secretaryConsent: checked,
         }));
     };
 
@@ -240,88 +225,6 @@ export default function MeuPerfilProfissional() {
                 </div>
             </div>
 
-            <div className="rounded-3xl border border-gray-200 bg-white shadow-md">
-                <div className="border-b border-gray-200 px-8 py-6">
-                    <h2 className="text-lg font-semibold text-gray-900">Conta da Secretaria</h2>
-                    <p className="text-sm text-gray-500">
-                        Utilize apenas os dados necessários e confirme que a secretária autorizou o uso das informações,
-                        conforme LGPD.
-                    </p>
-                </div>
-                <div className="space-y-6 px-8 py-8">
-                    <div className="grid gap-6 md:grid-cols-2">
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="secretaryFullName"
-                                className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                            >
-                                Nome completo da secretária
-                            </label>
-                            <Input
-                                id="secretaryFullName"
-                                name="secretaryFullName"
-                                value={professionalInfo.secretaryFullName}
-                                onChange={handleInputChange}
-                                placeholder="Ex: Ana Souza"
-                                autoComplete="off"
-                                className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="secretaryEmail"
-                                className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                            >
-                                E-mail profissional
-                            </label>
-                            <Input
-                                id="secretaryEmail"
-                                name="secretaryEmail"
-                                type="email"
-                                value={professionalInfo.secretaryEmail}
-                                onChange={handleInputChange}
-                                placeholder="Ex: ana.souza@clinica.com"
-                                autoComplete="off"
-                                className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-700 md:flex-row md:items-center md:justify-between">
-                        <label htmlFor="secretaryConsent" className="flex items-start gap-3 text-left text-sm text-gray-600">
-                            <input
-                                id="secretaryConsent"
-                                name="secretaryConsent"
-                                type="checkbox"
-                                checked={professionalInfo.secretaryConsent}
-                                onChange={handleConsentChange}
-                                className="mt-1 h-4 w-4 rounded border border-gray-300 accent-black"
-                            />
-                            <span>
-                                Confirmo que informei a secretária sobre o cadastro e obtive consentimento explícito para uso
-                                desses dados apenas para fins de acesso à plataforma, em conformidade com a Lei Geral de Proteção
-                                de Dados.
-                            </span>
-                        </label>
-                        <button
-                            type="button"
-                            className="w-full rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400 md:w-auto"
-                            disabled={
-                                !professionalInfo.secretaryFullName ||
-                                !professionalInfo.secretaryEmail ||
-                                !professionalInfo.secretaryConsent
-                            }
-                        >
-                            Gerar convite seguro
-                        </button>
-                    </div>
-
-                    <p className="text-xs text-gray-500">
-                        Os dados informados serão utilizados exclusivamente para criar o acesso da secretária e poderão ser
-                        removidos a qualquer momento. Mantenha registros de consentimento para auditorias.
-                    </p>
-                </div>
-            </div>
         </section>
     );
 }
