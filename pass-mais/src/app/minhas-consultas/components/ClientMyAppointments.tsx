@@ -1,7 +1,7 @@
 "use client";
 
 import NavBar from "@/components/NavBar";
-import { clearTokens, jsonGet } from "@/lib/api";
+import { clearTokens, jsonGet, jsonPost } from "@/lib/api";
 import { X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -58,12 +58,83 @@ function normalizeStatus(value?: string | null): AppointmentStatus {
     return upper as AppointmentStatus;
 }
 
+const CLOCK_REFRESH_INTERVAL_MS = 60_000;
+
+function normalizeTimePortion(value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) return "00:00:00";
+    const match = trimmed.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
+    if (!match) {
+        return trimmed;
+    }
+    const [, hour, minute = "00", second = "00"] = match;
+    return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
+}
+
+function tryParseDateTime(value: string) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getAppointmentDate(appointment: Appointment) {
+    const datePart = appointment.date?.trim();
+    if (!datePart) {
+        return null;
+    }
+
+    const timePart = appointment.time?.trim();
+    if (timePart) {
+        const combined = tryParseDateTime(`${datePart} ${timePart}`) ?? tryParseDateTime(`${datePart}T${timePart}`);
+        if (combined) {
+            return combined;
+        }
+    }
+
+    const directDate = tryParseDateTime(datePart);
+    if (directDate) {
+        return directDate;
+    }
+
+    const slashMatch = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (!slashMatch) {
+        return null;
+    }
+
+    const [, day, month, year] = slashMatch;
+    const yyyy = year.length === 2 ? `20${year}` : year.padStart(4, "0");
+    const mm = month.padStart(2, "0");
+    const dd = day.padStart(2, "0");
+    const isoDate = `${yyyy}-${mm}-${dd}`;
+
+    if (timePart) {
+        const normalizedTime = normalizeTimePortion(timePart);
+        const isoDateTime = tryParseDateTime(`${isoDate}T${normalizedTime}`);
+        if (isoDateTime) {
+            return isoDateTime;
+        }
+    }
+
+    return tryParseDateTime(`${isoDate}T00:00:00`);
+}
+
+function isAppointmentPast(appointment: Appointment, reference: Date) {
+    const date = getAppointmentDate(appointment);
+    if (!date) {
+        return false;
+    }
+    return date.getTime() < reference.getTime();
+}
+
 export default function ClientMyAppointments() {
     const [loadedAppointments, setLoadedAppointments] = useState<Appointment[] | null>(null);
     const [rescheduleId, setRescheduleId] = useState<string | null>(null);
     const [rescheduleSlots, setRescheduleSlots] = useState<SlotDay[] | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    const [actionMessage, setActionMessage] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [cancelingAppointmentId, setCancelingAppointmentId] = useState<string | null>(null);
+    const [now, setNow] = useState<Date>(() => new Date());
 
     const normalizeAppointments = (data: PatientAppointmentsApiItem[] | null | undefined): Appointment[] => {
         if (!Array.isArray(data) || data.length === 0) return [];
@@ -115,6 +186,13 @@ export default function ClientMyAppointments() {
         void loadAppointments();
     }, [loadAppointments]);
 
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setNow(new Date());
+        }, CLOCK_REFRESH_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, []);
+
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("pt-BR", {
             style: "currency",
@@ -142,16 +220,85 @@ export default function ClientMyAppointments() {
         return days;
     };
 
-    const scheduledAppointments = loadedAppointments?.filter((app) => app.status === "AGENDADA") || [];
-    const pastAppointments = loadedAppointments?.filter((app) => app.status === "REALIZADA") || [];
-    const canceledAppointments = loadedAppointments?.filter((app) => app.status === "CANCELADA") || [];
+    const { scheduledAppointments, pastAppointments, canceledAppointments } = useMemo(() => {
+        const buckets = {
+            scheduledAppointments: [] as Appointment[],
+            pastAppointments: [] as Appointment[],
+            canceledAppointments: [] as Appointment[],
+        };
 
-    const handleCancel = (id: string) => {
-        const confirmCancel = typeof window !== "undefined" && window.confirm("Tem certeza que deseja cancelar esta consulta?");
+        if (!loadedAppointments) {
+            return buckets;
+        }
+
+        for (const appointment of loadedAppointments) {
+            if (appointment.status === "CANCELADA") {
+                buckets.canceledAppointments.push(appointment);
+                continue;
+            }
+
+            if (appointment.status === "REALIZADA" || isAppointmentPast(appointment, now)) {
+                buckets.pastAppointments.push(appointment);
+                continue;
+            }
+
+            buckets.scheduledAppointments.push(appointment);
+        }
+
+        return buckets;
+    }, [loadedAppointments, now]);
+
+    const handleCancel = async (id: string) => {
+        const confirmCancel =
+            typeof window !== "undefined" && window.confirm("Tem certeza que deseja cancelar esta consulta?");
         if (!confirmCancel) return;
-        setLoadedAppointments((prev) =>
-            prev?.map((a) => (a.id === id ? { ...a, status: "CANCELADA" } : a)) || null
-        );
+
+        setCancelingAppointmentId(id);
+        setActionError(null);
+        setActionMessage(null);
+
+        try {
+            const response = await jsonPost<{ reason?: string }>(`/api/patients/appointments/${id}/cancel`, {});
+            setLoadedAppointments((prev) =>
+                prev?.map((appointment) =>
+                    appointment.id === id ? { ...appointment, status: "CANCELADA" } : appointment,
+                ) || null,
+            );
+            const reason = response?.reason?.trim();
+            setActionMessage(reason && reason.length > 0 ? reason : "Consulta cancelada com sucesso.");
+        } catch (error) {
+            const err = error as Error & { status?: number };
+            if (err.status === 401) {
+                clearTokens();
+            }
+            let friendlyMessage = err.message || "Não foi possível cancelar a consulta. Tente novamente.";
+            switch (err.status) {
+                case 400:
+                    friendlyMessage =
+                        "Esta consulta não pode mais ser cancelada. Entre em contato com a clínica para receber suporte.";
+                    break;
+                case 403:
+                    friendlyMessage =
+                        "Não foi possível confirmar a consulta para este paciente autenticado. Faça login novamente ou tente outra consulta.";
+                    break;
+                case 404:
+                    friendlyMessage = "Consulta não encontrada. Atualize a página e tente novamente.";
+                    break;
+                case 409:
+                    friendlyMessage = "A consulta já havia sido cancelada previamente.";
+                    break;
+                case 500:
+                case 502:
+                case 503:
+                    friendlyMessage = "Serviço indisponível no momento. Tente novamente em instantes.";
+                    break;
+                default:
+                    break;
+            }
+            setActionError(friendlyMessage);
+        } finally {
+            setCancelingAppointmentId(null);
+        }
     };
 
     return (
@@ -185,6 +332,18 @@ export default function ClientMyAppointments() {
                         </div>
                     ) : null}
 
+                    {actionError ? (
+                        <div className="mb-8 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                            {actionError}
+                        </div>
+                    ) : null}
+
+                    {actionMessage ? (
+                        <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                            {actionMessage}
+                        </div>
+                    ) : null}
+
                     {/* Consultas Agendadas */}
                     {scheduledAppointments.length > 0 && (
                         <div className="mb-10">
@@ -202,10 +361,11 @@ export default function ClientMyAppointments() {
                                     <p><strong>Valor:</strong> {formatCurrency(appointment.price)}</p>
                                     <div className="mt-4 flex flex-wrap gap-3">
                                         <button
-                                            onClick={() => handleCancel(appointment.id)}
-                                            className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 transition"
+                                            onClick={() => void handleCancel(appointment.id)}
+                                            className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-70 disabled:cursor-not-allowed"
+                                            disabled={cancelingAppointmentId === appointment.id}
                                         >
-                                            Cancelar consulta
+                                            {cancelingAppointmentId === appointment.id ? "Cancelando..." : "Cancelar consulta"}
                                         </button>
                                         <button
                                             onClick={() => {
@@ -222,10 +382,10 @@ export default function ClientMyAppointments() {
                         </div>
                     )}
 
-                    {/* Consultas Realizadas */}
+                    {/* Consultas Passadas */}
                     {pastAppointments.length > 0 && (
                         <div>
-                            <h3 className="text-2xl font-semibold text-gray-900 mb-4">Consultas Realizadas</h3>
+                            <h3 className="text-2xl font-semibold text-gray-900 mb-4">Consultas Passadas</h3>
                             {pastAppointments.map((appointment) => (
                                 <div
                                     key={appointment.id}
