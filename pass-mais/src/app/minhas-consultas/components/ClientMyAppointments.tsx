@@ -277,7 +277,7 @@ export default function ClientMyAppointments() {
                                             {cancelingAppointmentId === appointment.id ? "Cancelando..." : "Cancelar consulta"}
                                         </button>
                                         <Link
-                                            href={`/minhas-consultas/${appointment.id}/reagendar`}
+                                            href={`/reagendar-consulta/${appointment.id}`}
                                             className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
                                         >
                                             Reagendar
