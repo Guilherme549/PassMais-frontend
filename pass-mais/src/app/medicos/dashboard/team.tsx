@@ -452,10 +452,10 @@ export default function DoctorTeamPage() {
     const { mutateAsync: generateJoinCode, isPending: isGeneratingCode } = useGenerateJoinCode();
 
     const { mutateAsync: revokeJoinCode, isPending: isRevokingCode } = useRevokeJoinCode({
-        onSuccess: () => {
+        onSuccess: (result) => {
             pushBanner({
                 type: "success",
-                message: "Código revogado. Quem tentar utilizá-lo não conseguirá entrar na equipe.",
+                message: result?.message ?? "Código revogado. Quem tentar utilizá-lo não conseguirá entrar na equipe.",
             });
             void refetch();
         },
@@ -566,7 +566,7 @@ export default function DoctorTeamPage() {
     const confirmRevokeCode = async () => {
         if (!codeToRevoke) return;
         try {
-            await revokeJoinCode(codeToRevoke.id);
+            await revokeJoinCode(codeToRevoke.code);
         } catch {
             // handled in hook
         }
@@ -749,6 +749,9 @@ export default function DoctorTeamPage() {
                                 <div className="space-y-3">
                                     {joinCodes.map((code) => {
                                         const status = formatStatusBadge(code.status);
+                                        const normalizedStatus =
+                                            typeof code.status === "string" ? code.status.toLowerCase() : "";
+                                        const canRevoke = normalizedStatus === "ativo" || normalizedStatus === "active";
                                         return (
                                             <div
                                                 key={code.id}
@@ -782,7 +785,7 @@ export default function DoctorTeamPage() {
                                                             type="button"
                                                             onClick={() => setCodeToRevoke(code)}
                                                             className="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-red-200 hover:text-red-600"
-                                                            disabled={code.status !== "ativo"}
+                                                            disabled={!canRevoke}
                                                         >
                                                             Revogar
                                                         </button>
