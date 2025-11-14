@@ -121,19 +121,33 @@ function normalizeSecretaries(secretaries: unknown): TeamMember[] {
     return normalized;
 }
 
-function normalizeJoinCodes(payload: unknown): JoinCode[] {
+function resolveJoinCodesPayload(payload: unknown): unknown[] {
+    if (Array.isArray(payload)) return payload;
     if (!payload || typeof payload !== "object") return [];
     const source = payload as Record<string, unknown>;
-    const joinCodesRaw = source.joinCodes;
-    if (!Array.isArray(joinCodesRaw)) return [];
+    const candidates = [source.joinCodes, source.codes, source.data, source.items, source.results];
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) return candidate;
+    }
+    return [];
+}
+
+function normalizeJoinCodes(payload: unknown): JoinCode[] {
+    const joinCodesRaw = resolveJoinCodesPayload(payload);
+    if (joinCodesRaw.length === 0) return [];
 
     const normalized: JoinCode[] = [];
     for (const entry of joinCodesRaw) {
         if (!entry || typeof entry !== "object") continue;
         const candidate = entry as Record<string, unknown>;
 
-        const id = typeof candidate.id === "string" ? candidate.id : null;
-        const code = typeof candidate.code === "string" ? candidate.code : null;
+        const code = typeof candidate.code === "string" ? candidate.code.trim() : null;
+        const id =
+            typeof candidate.id === "string" && candidate.id.trim().length > 0
+                ? candidate.id.trim()
+                : code
+                  ? `invite-${code}`
+                  : null;
         if (!id || !code) continue;
 
         const status = typeof candidate.status === "string" ? candidate.status : "ativo";
@@ -141,19 +155,25 @@ function normalizeJoinCodes(payload: unknown): JoinCode[] {
             typeof candidate.expiresAt === "string" || candidate.expiresAt === null
                 ? (candidate.expiresAt as string | null)
                 : null;
-        const usesLeft =
+        const usesLeftRaw =
             typeof candidate.usesLeft === "number"
                 ? candidate.usesLeft
                 : typeof candidate.usesRemaining === "number"
                   ? candidate.usesRemaining
                   : 0;
+        const usesLeft = Number.isFinite(usesLeftRaw) ? Math.max(0, usesLeftRaw) : 0;
+        if (usesLeft <= 0) continue;
         const secretaryName =
             typeof candidate.secretaryName === "string"
                 ? candidate.secretaryName
+                : typeof candidate.secretaryFullName === "string"
+                  ? candidate.secretaryFullName
                 : undefined;
         const secretaryEmail =
             typeof candidate.secretaryEmail === "string"
                 ? candidate.secretaryEmail
+                : typeof candidate.secretaryCorporateEmail === "string"
+                  ? candidate.secretaryCorporateEmail
                 : undefined;
 
         normalized.push({
@@ -185,6 +205,10 @@ type RemoveMemberResult = {
     message?: string;
 };
 
+type RevokeJoinCodeResult = {
+    message?: string;
+};
+
 type UseDoctorTeamReturn = {
     data: DoctorTeamResponse | null;
     isLoading: boolean;
@@ -201,7 +225,7 @@ export function useDoctorTeam(): UseDoctorTeamReturn {
 
     const loadJoinCodes = useCallback(async (): Promise<JoinCode[]> => {
         try {
-            const response = await jsonGet<unknown>("/api/doctor/team");
+            const response = await jsonGet<unknown>("/api/teams/invites");
             return normalizeJoinCodes(response);
         } catch {
             return [];
@@ -324,21 +348,59 @@ export function useGenerateJoinCode(options: MutationOptions<GenerateJoinCodeRes
     return { mutateAsync, isPending, error };
 }
 
-export function useRevokeJoinCode(options: MutationOptions<void> = {}) {
+export function useRevokeJoinCode(options: MutationOptions<RevokeJoinCodeResult> = {}) {
     const [isPending, setIsPending] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
     const mutateAsync = useCallback(
-        async (id: string) => {
+        async (code: string) => {
             setIsPending(true);
             setError(null);
             try {
-                const response = await apiFetch(`/api/doctor/team/join-codes/${id}`, { method: "DELETE" });
-                if (!response.ok) {
-                    const message = await response.text();
-                    throw new Error(message || "Não foi possível revogar o código");
+                const inviteCode = (code ?? "").trim();
+                if (!inviteCode) {
+                    throw new Error("Não foi possível identificar o código do convite.");
                 }
-                options.onSuccess?.();
+
+                const response = await apiFetch(`/api/teams/invite/${encodeURIComponent(inviteCode)}/revoke`, {
+                    method: "PATCH",
+                });
+                const responseText = await response.text();
+                if (!response.ok) {
+                    const parseErrorMessage = (raw: string): string | null => {
+                        if (!raw) return null;
+                        try {
+                            const data = JSON.parse(raw) as Record<string, unknown>;
+                            const candidates = [data.message, data.detail, data.error, data.mensagem];
+                            const firstString = candidates.find(
+                                (candidate): candidate is string =>
+                                    typeof candidate === "string" && candidate.trim().length > 0,
+                            );
+                            if (firstString) return firstString;
+                        } catch {
+                            // ignore parse errors
+                        }
+                        const trimmed = raw.trim();
+                        return trimmed.length > 0 ? trimmed : null;
+                    };
+                    const message = parseErrorMessage(responseText) ?? "Não foi possível revogar o código.";
+                    throw new Error(message);
+                }
+
+                let message: string | undefined;
+                if (responseText) {
+                    try {
+                        const data = JSON.parse(responseText) as Record<string, unknown>;
+                        if (typeof data.message === "string" && data.message.trim().length > 0) {
+                            message = data.message.trim();
+                        }
+                    } catch {
+                        // ignore parse errors
+                    }
+                }
+                const result: RevokeJoinCodeResult = { message };
+                options.onSuccess?.(result);
+                return result;
             } catch (err) {
                 const errorInstance = err as Error;
                 setError(errorInstance);
@@ -653,6 +715,10 @@ export type AppointmentPatient = {
     cellPhone?: string | null;
     insuranceProvider?: string | null;
     insuranceNumber?: string | null;
+    responsibleName?: string | null;
+    responsibleKinship?: string | null;
+    responsibleCpf?: string | null;
+    responsiblePhone?: string | null;
 };
 
 export type Appointment = {
@@ -798,6 +864,18 @@ type DoctorAppointmentsApiItem = {
     patientInsuranceProvider?: string | null;
     patient_insurance_number?: string | null;
     patientInsuranceNumber?: string | null;
+    responsible_name?: string | null;
+    responsibleName?: string | null;
+    responsible_kinship?: string | null;
+    responsibleKinship?: string | null;
+    responsible_cpf?: string | null;
+    responsibleCpf?: string | null;
+    responsible_phone?: string | null;
+    responsiblePhone?: string | null;
+    patient_responsible_name?: string | null;
+    patient_responsible_kinship?: string | null;
+    patient_responsible_cpf?: string | null;
+    patient_responsible_phone?: string | null;
     created_at?: string | null;
     createdAt?: string | null;
     finalized_at?: string | null;
@@ -866,6 +944,13 @@ function mapDoctorAppointment(item: DoctorAppointmentsApiItem, fallbackDoctorId:
         item.patient_insurance_provider ?? item.patientInsuranceProvider ?? null;
     const patientInsuranceNumber =
         item.patient_insurance_number ?? item.patientInsuranceNumber ?? null;
+    const responsibleName = item.responsible_name ?? item.responsibleName ?? item.patient_responsible_name ?? null;
+    const responsibleKinship =
+        item.responsible_kinship ?? item.responsibleKinship ?? item.patient_responsible_kinship ?? null;
+    const responsibleCpf =
+        item.responsible_cpf ?? item.responsibleCpf ?? item.patient_responsible_cpf ?? null;
+    const responsiblePhone =
+        item.responsible_phone ?? item.responsiblePhone ?? item.patient_responsible_phone ?? null;
 
     return {
         id,
@@ -888,6 +973,10 @@ function mapDoctorAppointment(item: DoctorAppointmentsApiItem, fallbackDoctorId:
             cellPhone: patientCellPhone,
             insuranceProvider: patientInsuranceProvider,
             insuranceNumber: patientInsuranceNumber,
+            responsibleName,
+            responsibleKinship,
+            responsibleCpf,
+            responsiblePhone,
         },
         observations: item.observations ?? null,
         reason: item.reason ?? null,
@@ -1010,6 +1099,10 @@ type ConfirmAttendancePayload = {
     address: string;
     insuranceProvider?: string | null;
     insuranceNumber?: string | null;
+    responsibleName?: string | null;
+    responsibleKinship?: string | null;
+    responsibleCpf?: string | null;
+    responsiblePhone?: string | null;
 };
 
 export function useConfirmAttendance(options: MutationOptions<Appointment> = {}) {
