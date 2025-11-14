@@ -75,7 +75,7 @@ export default function SecretariaConvitePage() {
         }));
     };
 
-    type LoginAttemptResult = { success: true } | { success: false; message?: string };
+    type LoginAttemptResult = { success: true; message?: string } | { success: false; message?: string };
 
     const authenticateSecretary = async (email: string, password: string): Promise<LoginAttemptResult> => {
         try {
@@ -176,9 +176,10 @@ export default function SecretariaConvitePage() {
             setShowRegisterConfirmPassword(false);
             setLoginForm((prev) => ({ ...prev, email, password: "" }));
             setLoginError(null);
+            const loginFailureMessage = !loginResult.success ? loginResult.message : undefined;
             const successMessage =
                 joinResponse?.message ??
-                loginResult.message ??
+                loginFailureMessage ??
                 "Conta criada com sucesso! Faça login com suas credenciais para continuar.";
             setLoginInfo(successMessage);
             setMode("login");
