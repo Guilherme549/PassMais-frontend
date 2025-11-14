@@ -1,63 +1,63 @@
-import { NextResponse } from "next/server";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
-import { confirmAppointmentPresence } from "../../mock-data";
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+    if (!API_BASE) {
+        return new Response(JSON.stringify({ message: "NEXT_PUBLIC_API_BASE_URL não definido" }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+        });
+    }
 
-export async function POST(request: Request, context: { params: { id: string } }) {
-    const id = context?.params?.id;
+    const params = await context.params;
+    const id = params?.id?.trim();
 
     if (!id) {
-        return NextResponse.json({ message: "Agendamento inválido." }, { status: 400 });
+        return new Response(JSON.stringify({ message: "Agendamento inválido." }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+        });
     }
 
-    let body: unknown;
+    let rawBody: string;
     try {
-        body = await request.json();
+        rawBody = await request.text();
     } catch {
-        return NextResponse.json({ message: "Não foi possível ler os dados enviados." }, { status: 400 });
+        return new Response(JSON.stringify({ message: "Não foi possível ler os dados enviados." }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+        });
     }
 
-    if (!body || typeof body !== "object") {
-        return NextResponse.json({ message: "Dados inválidos para confirmação." }, { status: 400 });
-    }
+    const headers = new Headers({
+        "Content-Type": "application/json",
+        Accept: "application/json",
+    });
 
-    const payload = body as {
-        fullName?: string;
-        cpf?: string;
-        birthDate?: string;
-        motherName?: string;
-        sex?: "Feminino" | "Masculino" | "Outro" | "Não informado";
-        email?: string | null;
-        address?: string;
-    };
-
-    if (!payload.fullName || !payload.cpf) {
-        return NextResponse.json(
-            { message: "Informe nome completo e CPF para confirmar a presença." },
-            { status: 400 },
-        );
-    }
-
-    if (!payload.birthDate || !payload.motherName || !payload.sex || !payload.address) {
-        return NextResponse.json(
-            { message: "Preencha os campos obrigatórios da ficha do paciente." },
-            { status: 400 },
-        );
+    const authHeader = request.headers.get("authorization");
+    if (authHeader) {
+        headers.set("Authorization", authHeader);
     }
 
     try {
-        const updated = confirmAppointmentPresence(id, {
-            fullName: payload.fullName,
-            cpf: payload.cpf,
-            birthDate: payload.birthDate,
-            motherName: payload.motherName,
-            sex: payload.sex,
-            email: payload.email ?? null,
-            address: payload.address,
+        const upstream = await fetch(`${API_BASE}/api/appointments/${encodeURIComponent(id)}/check-in`, {
+            method: "POST",
+            headers,
+            body: rawBody,
+            cache: "no-store",
         });
 
-        return NextResponse.json(updated, { status: 200 });
+        const contentType = upstream.headers.get("content-type") || "application/json";
+        const payload = await upstream.text();
+
+        return new Response(payload, {
+            status: upstream.status,
+            headers: { "content-type": contentType },
+        });
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Não foi possível confirmar o atendimento.";
-        return NextResponse.json({ message }, { status: 400 });
+        const message = error instanceof Error ? error.message : "Erro ao confirmar o atendimento.";
+        return new Response(JSON.stringify({ message }), {
+            status: 502,
+            headers: { "content-type": "application/json" },
+        });
     }
 }
