@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export interface AppointmentBasic {
-    id: number;
+    id: string;
     doctor: string;
 }
 
@@ -124,4 +124,3 @@ export default function RescheduleModal({ appointment, slots, onClose, onConfirm
         </div>
     );
 }
-
