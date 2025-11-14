@@ -1,33 +1,119 @@
 "use client";
 
 import NavBar from "@/components/NavBar";
+import { clearTokens, jsonGet } from "@/lib/api";
 import { X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RescheduleModal, { SlotDay } from "./RescheduleModal";
 
-interface Appointment {
-    id: number;
+type AppointmentStatus = "AGENDADA" | "REALIZADA" | "CANCELADA" | string;
+
+type Appointment = {
+    id: string;
     date: string;
     time: string;
-    doctor: string;
-    address: string;
-    value: number;
-    status: "agendada" | "realizada" | "cancelada";
+    doctorName: string;
+    patientName: string;
+    clinicAddress: string;
+    price: number;
+    status: AppointmentStatus;
+};
+
+type PatientAppointmentsApiItem = {
+    id?: string | null;
+    date?: string | null;
+    time?: string | null;
+    doctorName?: string | null;
+    patientName?: string | null;
+    clinicAddress?: string | null;
+    price?: number | string | null;
+    status?: string | null;
+};
+
+function extractAppointmentsPayload(payload: unknown): PatientAppointmentsApiItem[] {
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+
+    if (payload && typeof payload === "object") {
+        const source = payload as Record<string, unknown>;
+        const candidates = [source.data, source.items, source.results, source.appointments, source.content];
+        for (const candidate of candidates) {
+            if (Array.isArray(candidate)) {
+                return candidate as PatientAppointmentsApiItem[];
+            }
+        }
+    }
+
+    return [];
 }
 
-export default function ClientMyAppointments({
-    appointments,
-}: {
-    appointments: Appointment[] | null;
-}) {
-    const [loadedAppointments, setLoadedAppointments] = useState<Appointment[] | null>(appointments);
-    const [rescheduleId, setRescheduleId] = useState<number | null>(null);
+function normalizeStatus(value?: string | null): AppointmentStatus {
+    if (!value) return "AGENDADA";
+    const upper = value.toUpperCase();
+    if (["AGENDADA", "AGENDADO", "SCHEDULED", "PENDING"].includes(upper)) return "AGENDADA";
+    if (["REALIZADA", "REALIZADO", "COMPLETED", "DONE"].includes(upper)) return "REALIZADA";
+    if (["CANCELADA", "CANCELADO", "CANCELED", "CANCELLED"].includes(upper)) return "CANCELADA";
+    return upper as AppointmentStatus;
+}
+
+export default function ClientMyAppointments() {
+    const [loadedAppointments, setLoadedAppointments] = useState<Appointment[] | null>(null);
+    const [rescheduleId, setRescheduleId] = useState<string | null>(null);
     const [rescheduleSlots, setRescheduleSlots] = useState<SlotDay[] | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const normalizeAppointments = (data: PatientAppointmentsApiItem[] | null | undefined): Appointment[] => {
+        if (!Array.isArray(data) || data.length === 0) return [];
+        return data.map((item, index) => {
+            const priceValue =
+                typeof item?.price === "number"
+                    ? item.price
+                    : typeof item?.price === "string"
+                        ? Number(item.price)
+                        : 0;
+            const status = normalizeStatus(item?.status);
+            return {
+                id: (item?.id && String(item.id)) || `appt-${index + 1}`,
+                date: item?.date ?? "—",
+                time: item?.time ?? "—",
+                doctorName: item?.doctorName ?? "—",
+                patientName: item?.patientName ?? "—",
+                clinicAddress: item?.clinicAddress ?? "—",
+                price: Number.isFinite(priceValue) ? priceValue : 0,
+                status,
+            };
+        });
+    };
+
+    const loadAppointments = useCallback(async () => {
+        setIsLoading(true);
+        setFetchError(null);
+        try {
+            const response = await jsonGet<unknown>("/api/patients/appointments");
+            const parsed = extractAppointmentsPayload(response);
+            setLoadedAppointments(normalizeAppointments(parsed));
+        } catch (error) {
+            const status = (error as Error & { status?: number }).status;
+            if (status === 401) {
+                clearTokens();
+            }
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível carregar suas consultas. Tente novamente.";
+            setFetchError(message);
+            setLoadedAppointments(null);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        setLoadedAppointments(appointments);
-    }, [appointments]);
+        void loadAppointments();
+    }, [loadAppointments]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("pt-BR", {
@@ -56,15 +142,15 @@ export default function ClientMyAppointments({
         return days;
     };
 
-    const scheduledAppointments = loadedAppointments?.filter((app) => app.status === "agendada") || [];
-    const pastAppointments = loadedAppointments?.filter((app) => app.status === "realizada") || [];
-    const canceledAppointments = loadedAppointments?.filter((app) => app.status === "cancelada") || [];
+    const scheduledAppointments = loadedAppointments?.filter((app) => app.status === "AGENDADA") || [];
+    const pastAppointments = loadedAppointments?.filter((app) => app.status === "REALIZADA") || [];
+    const canceledAppointments = loadedAppointments?.filter((app) => app.status === "CANCELADA") || [];
 
-    const handleCancel = (id: number) => {
+    const handleCancel = (id: string) => {
         const confirmCancel = typeof window !== "undefined" && window.confirm("Tem certeza que deseja cancelar esta consulta?");
         if (!confirmCancel) return;
         setLoadedAppointments((prev) =>
-            prev?.map((a) => (a.id === id ? { ...a, status: "cancelada" } : a)) || null
+            prev?.map((a) => (a.id === id ? { ...a, status: "CANCELADA" } : a)) || null
         );
     };
 
@@ -89,6 +175,16 @@ export default function ClientMyAppointments({
                         Minhas Consultas
                     </h2>
 
+                    {isLoading ? (
+                        <p className="text-gray-600 text-lg px-2">Carregando suas consultas...</p>
+                    ) : null}
+
+                    {fetchError ? (
+                        <div className="mb-10 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                            {fetchError}
+                        </div>
+                    ) : null}
+
                     {/* Consultas Agendadas */}
                     {scheduledAppointments.length > 0 && (
                         <div className="mb-10">
@@ -100,9 +196,10 @@ export default function ClientMyAppointments({
                                 >
                                     <p><strong>Data:</strong> {appointment.date}</p>
                                     <p><strong>Horário:</strong> {appointment.time}</p>
-                                    <p><strong>Médico:</strong> {appointment.doctor}</p>
-                                    <p><strong>Endereço:</strong> {appointment.address}</p>
-                                    <p><strong>Valor:</strong> {formatCurrency(appointment.value)}</p>
+                                    <p><strong>Médico:</strong> {appointment.doctorName}</p>
+                                    <p><strong>Paciente:</strong> {appointment.patientName}</p>
+                                    <p><strong>Endereço:</strong> {appointment.clinicAddress}</p>
+                                    <p><strong>Valor:</strong> {formatCurrency(appointment.price)}</p>
                                     <div className="mt-4 flex flex-wrap gap-3">
                                         <button
                                             onClick={() => handleCancel(appointment.id)}
@@ -136,9 +233,10 @@ export default function ClientMyAppointments({
                                 >
                                     <p><strong>Data:</strong> {appointment.date}</p>
                                     <p><strong>Horário:</strong> {appointment.time}</p>
-                                    <p><strong>Médico:</strong> {appointment.doctor}</p>
-                                    <p><strong>Endereço:</strong> {appointment.address}</p>
-                                    <p><strong>Valor:</strong> {formatCurrency(appointment.value)}</p>
+                                    <p><strong>Médico:</strong> {appointment.doctorName}</p>
+                                    <p><strong>Paciente:</strong> {appointment.patientName}</p>
+                                    <p><strong>Endereço:</strong> {appointment.clinicAddress}</p>
+                                    <p><strong>Valor:</strong> {formatCurrency(appointment.price)}</p>
                                 </div>
                             ))}
                         </div>
@@ -155,9 +253,10 @@ export default function ClientMyAppointments({
                                 >
                                     <p className="text-gray-700"><strong>Data:</strong> {appointment.date}</p>
                                     <p className="text-gray-700"><strong>Horário:</strong> {appointment.time}</p>
-                                    <p className="text-gray-700"><strong>Médico:</strong> {appointment.doctor}</p>
-                                    <p className="text-gray-700"><strong>Endereço:</strong> {appointment.address}</p>
-                                    <p className="text-gray-700"><strong>Valor:</strong> {formatCurrency(appointment.value)}</p>
+                                    <p className="text-gray-700"><strong>Médico:</strong> {appointment.doctorName}</p>
+                                    <p className="text-gray-700"><strong>Paciente:</strong> {appointment.patientName}</p>
+                                    <p className="text-gray-700"><strong>Endereço:</strong> {appointment.clinicAddress}</p>
+                                    <p className="text-gray-700"><strong>Valor:</strong> {formatCurrency(appointment.price)}</p>
                                     <p className="mt-2 text-sm text-red-700">Esta consulta foi cancelada.</p>
                                 </div>
                             ))}
@@ -170,16 +269,16 @@ export default function ClientMyAppointments({
                     )}
                 </div>
             </div>
-            {rescheduleId && rescheduleSlots && loadedAppointments && (
-                <RescheduleModal
-                    appointment={{
-                        id: rescheduleId,
-                        doctor: loadedAppointments.find((a) => a.id === rescheduleId)?.doctor || "",
-                    }}
-                    slots={rescheduleSlots}
-                    onClose={() => {
-                        setRescheduleId(null);
-                        setRescheduleSlots(null);
+                    {rescheduleId && rescheduleSlots && loadedAppointments && (
+                        <RescheduleModal
+                            appointment={{
+                                id: rescheduleId,
+                                doctor: loadedAppointments.find((a) => a.id === rescheduleId)?.doctorName || "",
+                            }}
+                            slots={rescheduleSlots}
+                            onClose={() => {
+                                setRescheduleId(null);
+                                setRescheduleSlots(null);
                     }}
                     onConfirm={({ date, time }) => {
                         setLoadedAppointments((prev) =>
