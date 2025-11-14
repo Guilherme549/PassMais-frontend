@@ -38,6 +38,37 @@ const joinAddressParts = (...parts: Array<string | null | undefined>) =>
         .filter((value) => value.length > 0)
         .join(", ");
 
+const stripDigits = (value: string) => value.replace(/\D/g, "");
+
+const normalizeComparable = (value: string) =>
+    value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+const formatCpfValue = (value: string) => {
+    const digits = stripDigits(value).slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) {
+        return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    }
+    if (digits.length <= 9) {
+        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    }
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+};
+
+const formatPhoneValue = (value: string) => {
+    const digits = stripDigits(value).slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
+
 function zonedTimeToUtc(isoDate: string, time: string, timeZone: string) {
     try {
         const [year, month, day] = isoDate.split("-").map(Number);
@@ -85,7 +116,7 @@ function isSlotPast(day: DoctorScheduleDay, slot: string, schedule: DoctorSchedu
 function formatIsoDateLabel(isoDate: string, schedule: DoctorSchedule | null) {
     if (!schedule) return isoDate;
     const [year, month, day] = isoDate.split("-").map(Number);
-    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    const utcDate = new Date(Date.UTC(year, month - 1, day, 12));
     return new Intl.DateTimeFormat("pt-BR", {
         timeZone: schedule.timezone,
         weekday: "long",
@@ -98,7 +129,7 @@ function formatScheduleRange(schedule: DoctorSchedule | null) {
     if (!schedule) return null;
     const formatDate = (isoDate: string) => {
         const [year, month, day] = isoDate.split("-").map(Number);
-        const utcDate = new Date(Date.UTC(year, month - 1, day));
+        const utcDate = new Date(Date.UTC(year, month - 1, day, 12));
         return new Intl.DateTimeFormat("pt-BR", {
             timeZone: schedule.timezone,
             day: "2-digit",
@@ -144,36 +175,6 @@ export default function ClientDoctorProfile({
     }>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [tokenSynced, setTokenSynced] = useState(false);
-
-    const stripDigits = (value: string) => value.replace(/\D/g, "");
-    const normalizeComparable = (value: string) =>
-        value
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toLowerCase();
-
-    const formatCpf = (value: string) => {
-        const digits = stripDigits(value).slice(0, 11);
-        if (digits.length <= 3) return digits;
-        if (digits.length <= 6) {
-            return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-        }
-        if (digits.length <= 9) {
-            return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-        }
-        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
-    };
-
-    const formatPhone = (value: string) => {
-        const digits = stripDigits(value).slice(0, 11);
-        if (digits.length <= 2) return digits;
-        if (digits.length <= 7) {
-            return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-        }
-        return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-    };
 
     useEffect(() => {
         if (tokenSynced) return;
@@ -223,7 +224,7 @@ export default function ClientDoctorProfile({
                 "document_number"
             );
             if (resolvedCpf) {
-                setCpf(formatCpf(resolvedCpf));
+                setCpf(formatCpfValue(resolvedCpf));
             }
         }
 
@@ -242,7 +243,7 @@ export default function ClientDoctorProfile({
                 "contact_phone"
             );
             if (resolvedPhone) {
-                setPhone(formatPhone(resolvedPhone));
+                setPhone(formatPhoneValue(resolvedPhone));
             }
         }
 
@@ -770,7 +771,7 @@ export default function ClientDoctorProfile({
                                         autoComplete="off"
                                         value={cpf}
                                         onChange={(event) => {
-                                            setCpf(formatCpf(event.target.value));
+                                            setCpf(formatCpfValue(event.target.value));
                                             setFieldErrors((prev) => ({ ...prev, cpf: undefined }));
                                             setFormError(null);
                                         }}
@@ -795,7 +796,7 @@ export default function ClientDoctorProfile({
                                         inputMode="tel"
                                         value={phone}
                                         onChange={(event) => {
-                                            setPhone(formatPhone(event.target.value));
+                                            setPhone(formatPhoneValue(event.target.value));
                                             setFieldErrors((prev) => ({ ...prev, phone: undefined }));
                                             setFormError(null);
                                         }}
@@ -947,7 +948,7 @@ export default function ClientDoctorProfile({
                                                 type="text"
                                                 value={otherCpf}
                                                 onChange={(event) => {
-                                                    setOtherCpf(formatCpf(event.target.value));
+                                                    setOtherCpf(formatCpfValue(event.target.value));
                                                     setFieldErrors((prev) => ({ ...prev, otherCpf: undefined }));
                                                     setFormError(null);
                                                 }}
@@ -1001,7 +1002,7 @@ export default function ClientDoctorProfile({
                                                 inputMode="tel"
                                                 value={otherPhone}
                                                 onChange={(event) => {
-                                                    setOtherPhone(formatPhone(event.target.value));
+                                                    setOtherPhone(formatPhoneValue(event.target.value));
                                                     setFieldErrors((prev) => ({ ...prev, otherPhone: undefined }));
                                                     setFormError(null);
                                                 }}
