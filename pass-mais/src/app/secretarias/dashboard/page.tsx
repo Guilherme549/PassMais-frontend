@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronRight, ClipboardList, Clock, LogOut, MapPin, User2, X } from "lucide-react";
 
-import { useConfirmAttendance, useDoctorAppointments, useMyDoctors, type Appointment } from "@/hooks/team";
-import { clearTokens, setTokens } from "@/lib/api";
+import { useDoctorAppointments, useMyDoctors, type Appointment } from "@/hooks/team";
+import { clearTokens, jsonGet, jsonPost, setTokens } from "@/lib/api";
 
 type SexOption = "Feminino" | "Masculino" | "Outro" | "Não informado";
 
@@ -35,6 +35,7 @@ const STATUS_BADGE_TONES: Record<Appointment["status"], string> = {
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_APPOINTMENT_SORT = "dateTime,asc";
+const BRAZIL_TIMEZONE_OFFSET_MINUTES = -3 * 60;
 
 function formatDateTime(iso: string, options: Intl.DateTimeFormatOptions) {
     const date = new Date(iso);
@@ -115,6 +116,24 @@ function maskPhone(value: string) {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
 }
 
+function getBrasiliaIsoTimestamp(date: Date = new Date()) {
+    const pad = (value: number, size = 2) => value.toString().padStart(size, "0");
+    const tzDate = new Date(date.getTime() + BRAZIL_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
+    const year = tzDate.getUTCFullYear();
+    const month = pad(tzDate.getUTCMonth() + 1);
+    const day = pad(tzDate.getUTCDate());
+    const hours = pad(tzDate.getUTCHours());
+    const minutes = pad(tzDate.getUTCMinutes());
+    const seconds = pad(tzDate.getUTCSeconds());
+    const milliseconds = tzDate.getUTCMilliseconds().toString().padStart(3, "0");
+    const offsetSign = BRAZIL_TIMEZONE_OFFSET_MINUTES <= 0 ? "-" : "+";
+    const absOffset = Math.abs(BRAZIL_TIMEZONE_OFFSET_MINUTES);
+    const offsetHours = pad(Math.floor(absOffset / 60));
+    const offsetMinutes = pad(absOffset % 60);
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}${offsetSign}${offsetHours}:${offsetMinutes}`;
+}
+
 type PatientFormState = {
     fullName: string;
     cpf: string;
@@ -126,6 +145,27 @@ type PatientFormState = {
     address: string;
     insuranceProvider: string;
     insuranceNumber: string;
+    responsibleName: string;
+    responsibleKinship: string;
+    responsibleCpf: string;
+    responsiblePhone: string;
+};
+
+type SanitizedPatientForm = {
+    fullName: string;
+    cpf: string;
+    birthDate: string;
+    motherName: string;
+    sex: SexOption;
+    email: string;
+    phone: string;
+    address: string;
+    insuranceProvider: string;
+    insuranceNumber: string;
+    responsibleName: string;
+    responsibleKinship: string;
+    responsibleCpf: string;
+    responsiblePhone: string;
 };
 
 const DEFAULT_FORM: PatientFormState = {
@@ -139,6 +179,10 @@ const DEFAULT_FORM: PatientFormState = {
     address: "",
     insuranceProvider: "",
     insuranceNumber: "",
+    responsibleName: "",
+    responsibleKinship: "",
+    responsibleCpf: "",
+    responsiblePhone: "",
 };
 
 function extractPatientForm(appointment: Appointment): PatientFormState {
@@ -154,6 +198,10 @@ function extractPatientForm(appointment: Appointment): PatientFormState {
         phone: maskPhone(patient.cellPhone ?? ""),
         insuranceProvider: appointment.patient.insuranceProvider ?? "",
         insuranceNumber: appointment.patient.insuranceNumber ?? "",
+        responsibleName: patient.responsibleName ?? "",
+        responsibleKinship: patient.responsibleKinship ?? "",
+        responsibleCpf: maskCpf(patient.responsibleCpf ?? ""),
+        responsiblePhone: maskPhone(patient.responsiblePhone ?? ""),
     };
 }
 
@@ -166,6 +214,130 @@ function normalizeBirthDateInput(value: string) {
         return `${year}-${month}-${day}`;
     }
     return "";
+}
+
+function calculateAgeFromIso(dateString: string | null | undefined) {
+    if (!dateString) return null;
+    const birth = new Date(dateString);
+    if (Number.isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age -= 1;
+    }
+    return age;
+}
+
+type PatientRecordResponse = {
+    fullName?: string | null;
+    cpf?: string | null;
+    birthDate?: string | null;
+    motherName?: string | null;
+    sex?: SexOption | null;
+    email?: string | null;
+    contactPhone?: string | null;
+    fullAddress?: string | null;
+    hasLegalResponsible?: boolean | null;
+    responsible?: {
+        fullName?: string | null;
+        relationship?: string | null;
+        cpf?: string | null;
+        phone?: string | null;
+    } | null;
+    healthInsurance?: {
+        name?: string | null;
+    } | null;
+    presenceConfirmedAt?: string | null;
+};
+
+type PatientRecordUpsertResponse = {
+    id?: string;
+    message?: string;
+};
+
+function hasPatientRecord(patient: Appointment["patient"] | null | undefined) {
+    if (!patient) return false;
+
+    const candidates: Array<string | null | undefined> = [
+        patient.name,
+        patient.cpf,
+        patient.birthDate,
+        patient.motherName,
+        patient.cellPhone,
+        patient.address,
+        patient.email,
+        patient.insuranceProvider,
+        patient.insuranceNumber,
+        patient.responsibleName,
+        patient.responsibleCpf,
+        patient.responsiblePhone,
+    ];
+
+    return candidates.some((value) => {
+        if (typeof value !== "string") return false;
+        const trimmed = value.trim();
+        if (!trimmed) return false;
+        return trimmed.toLowerCase() !== "não informado";
+    });
+}
+
+function formatDisplayValue(value: string | null | undefined, fallback = "Não informado") {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function mergePatientRecordIntoFormState(
+    record: PatientRecordResponse,
+    fallback: PatientFormState,
+): PatientFormState {
+    const responsible = record.responsible ?? null;
+    const hasResponsible = Boolean(record.hasLegalResponsible) || Boolean(responsible);
+
+    return {
+        ...fallback,
+        fullName: record.fullName ?? fallback.fullName,
+        cpf: record.cpf ? maskCpf(record.cpf) : fallback.cpf,
+        birthDate: record.birthDate ? maskBirthDate(record.birthDate) : fallback.birthDate,
+        motherName: record.motherName ?? fallback.motherName,
+        sex: record.sex ?? fallback.sex,
+        email: record.email ?? fallback.email,
+        phone: record.contactPhone ? maskPhone(record.contactPhone) : fallback.phone,
+        address: record.fullAddress ?? fallback.address,
+        responsibleName: hasResponsible ? responsible?.fullName ?? fallback.responsibleName : "",
+        responsibleKinship: hasResponsible ? responsible?.relationship ?? fallback.responsibleKinship : "",
+        responsibleCpf: hasResponsible
+            ? responsible?.cpf
+                ? maskCpf(responsible.cpf)
+                : fallback.responsibleCpf
+            : "",
+        responsiblePhone: hasResponsible
+            ? responsible?.phone
+                ? maskPhone(responsible.phone)
+                : fallback.responsiblePhone
+            : "",
+        insuranceProvider: record.healthInsurance?.name ?? fallback.insuranceProvider,
+    };
+}
+
+function buildFormStateFromSanitized(data: SanitizedPatientForm): PatientFormState {
+    return {
+        fullName: data.fullName,
+        cpf: maskCpf(data.cpf),
+        birthDate: data.birthDate ? maskBirthDate(data.birthDate) : "",
+        motherName: data.motherName,
+        sex: data.sex,
+        email: data.email,
+        phone: maskPhone(data.phone),
+        address: data.address,
+        insuranceProvider: data.insuranceProvider,
+        insuranceNumber: data.insuranceNumber,
+        responsibleName: data.responsibleName,
+        responsibleKinship: data.responsibleKinship,
+        responsibleCpf: maskCpf(data.responsibleCpf),
+        responsiblePhone: maskPhone(data.responsiblePhone),
+    };
 }
 
 type JwtPayload = {
@@ -195,6 +367,49 @@ const tokenExpired = (token: string) => {
     return false;
 };
 
+const DEFAULT_APPOINTMENT_ERROR = "Não foi possível carregar os agendamentos. Tente novamente em instantes.";
+
+function extractFriendlyErrorMessage(error: Error | null): string {
+    if (!error) return DEFAULT_APPOINTMENT_ERROR;
+
+    const typedError = error as Error & { status?: number };
+    if (typedError.status === 401) {
+        return "Sua sessão expirou. Faça login novamente para continuar.";
+    }
+    if (typedError.status === 403) {
+        return "Seu vínculo com este médico está inativo. Solicite um novo convite ao responsável.";
+    }
+
+    const rawMessage = error.message?.trim();
+    if (!rawMessage) return DEFAULT_APPOINTMENT_ERROR;
+
+    try {
+        const parsed = JSON.parse(rawMessage) as Record<string, unknown>;
+        const candidates = [
+            parsed.message,
+            parsed.detail,
+            parsed.title,
+            parsed.error,
+            parsed.mensagem,
+        ];
+        const firstString = candidates.find(
+            (candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0,
+        );
+        if (firstString) return firstString;
+    } catch {
+        // message was not JSON
+    }
+
+    if (/forbidden/i.test(rawMessage)) {
+        return "Seu acesso a este médico foi revogado. Peça um novo convite para continuar.";
+    }
+    if (/unauthorized/i.test(rawMessage)) {
+        return "Não foi possível validar suas credenciais. Faça login novamente.";
+    }
+
+    return rawMessage || DEFAULT_APPOINTMENT_ERROR;
+}
+
 export default function SecretaryDashboardPage() {
     const router = useRouter();
     const [selectedDoctor, setSelectedDoctor] = useState<string | null>(null);
@@ -207,6 +422,18 @@ export default function SecretaryDashboardPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [page, setPage] = useState<number>(0);
     const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+    const [isEditingPatientForm, setIsEditingPatientForm] = useState<boolean>(false);
+    const [isConfirming, setIsConfirming] = useState<boolean>(false);
+    const patientFormRef = useRef<HTMLFormElement | null>(null);
+    const [patientRecordStatus, setPatientRecordStatus] = useState<"idle" | "loading" | "success" | "not-found" | "error">(
+        "idle",
+    );
+    const [patientRecordAlert, setPatientRecordAlert] = useState<string | null>(null);
+    const latestPatientRecordCpfRef = useRef<string | null>(null);
+    const patientRecordCacheRef = useRef<
+        Map<string, { status: "success"; data: PatientRecordResponse } | { status: "not-found" }>
+    >(new Map());
+    const pendingPatientRecordCpfRef = useRef<string | null>(null);
 
     const {
         data: doctors,
@@ -214,6 +441,8 @@ export default function SecretaryDashboardPage() {
         error: doctorsError,
         refetch: refetchDoctors,
     } = useMyDoctors();
+    const hasDoctorLinks = doctors.length > 0;
+    const showUnlinkedState = !isLoadingDoctors && !doctorsError && !hasDoctorLinks;
 
     useEffect(() => {
         try {
@@ -318,23 +547,79 @@ export default function SecretaryDashboardPage() {
         }
     }, [error, router]);
 
-    const { mutateAsync: confirmAttendance, isPending: isConfirming } = useConfirmAttendance({
-        onSuccess: () => {
-            setSuccessMessage("Presença confirmada com sucesso!");
-        },
-        onError: (err) => {
-            const status = (err as Error & { status?: number }).status;
-            if (status === 401) {
-                clearTokens();
-                try {
-                    localStorage.removeItem("passmais:accessToken");
-                    localStorage.removeItem("passmais:role");
-                    localStorage.removeItem("passmais:fullName");
-                } catch {}
-                router.replace("/secretarias/convite");
+    const loadPatientRecord = useCallback(
+        async (cpf: string) => {
+            if (!cpf || cpf.length !== 11) {
+                setPatientRecordStatus("error");
+                setPatientRecordAlert("CPF do paciente inválido. Atualize os dados para criar a ficha.");
+                return;
+            }
+
+            if (pendingPatientRecordCpfRef.current === cpf) {
+                return;
+            }
+
+            const cached = patientRecordCacheRef.current.get(cpf);
+            if (cached) {
+                if (cached.status === "success") {
+                    latestPatientRecordCpfRef.current = cpf;
+                    setFormState((prev) => mergePatientRecordIntoFormState(cached.data, prev));
+                    setPatientRecordStatus("success");
+                    setPatientRecordAlert(null);
+                    return;
+                }
+                if (cached.status === "not-found") {
+                    latestPatientRecordCpfRef.current = cpf;
+                    setPatientRecordStatus("not-found");
+                    setPatientRecordAlert(null);
+                    return;
+                }
+            }
+
+            latestPatientRecordCpfRef.current = cpf;
+            setPatientRecordStatus("loading");
+            setPatientRecordAlert(null);
+            pendingPatientRecordCpfRef.current = cpf;
+
+            try {
+                const record = await jsonGet<PatientRecordResponse>(`/api/patients/${cpf}`);
+                if (latestPatientRecordCpfRef.current !== cpf) return;
+                setFormState((prev) => mergePatientRecordIntoFormState(record, prev));
+                setPatientRecordStatus("success");
+                patientRecordCacheRef.current.set(cpf, { status: "success", data: record });
+            } catch (err) {
+                if (latestPatientRecordCpfRef.current !== cpf) return;
+                const status = (err as Error & { status?: number }).status;
+                if (status === 401) {
+                    clearTokens();
+                    try {
+                        localStorage.removeItem("passmais:accessToken");
+                        localStorage.removeItem("passmais:role");
+                        localStorage.removeItem("passmais:fullName");
+                    } catch {}
+                    router.replace("/secretarias/convite");
+                    return;
+                }
+                if (status === 404) {
+                    setPatientRecordStatus("not-found");
+                    patientRecordCacheRef.current.set(cpf, { status: "not-found" });
+                    setPatientRecordAlert(null);
+                } else {
+                    setPatientRecordStatus("error");
+                    setPatientRecordAlert(
+                        err instanceof Error
+                            ? err.message
+                            : "Não foi possível carregar a ficha do paciente. Tente novamente.",
+                    );
+                }
+            } finally {
+                if (pendingPatientRecordCpfRef.current === cpf) {
+                    pendingPatientRecordCpfRef.current = null;
+                }
             }
         },
-    });
+        [router],
+    );
 
     const filteredAppointments = useMemo(() => {
         const normalizedNameFilter = patientNameFilter
@@ -420,7 +705,7 @@ export default function SecretaryDashboardPage() {
                 value: selectedAppointment.patient.cpf ? maskCpf(selectedAppointment.patient.cpf) : "-",
             },
             {
-                label: "Nascimento do paciente",
+                label: "Data de nascimento",
                 value: selectedAppointment.patient.birthDate
                     ? maskBirthDate(selectedAppointment.patient.birthDate)
                     : "-",
@@ -429,32 +714,41 @@ export default function SecretaryDashboardPage() {
                 label: "Celular do paciente",
                 value: formatCellPhone(selectedAppointment.patient.cellPhone),
             },
-            {
-                label: "Convênio",
-                value: selectedAppointment.patient.insuranceProvider || "Não informado",
-            },
-            {
-                label: "Número do convênio",
-                value: selectedAppointment.patient.insuranceNumber || "-",
-            },
-            {
-                label: "Código do dependente",
-                value: selectedAppointment.dependentId || "-",
-            },
-            {
-                label: "Reagendado de",
-                value: selectedAppointment.rescheduledFromId || "-",
-            },
         ];
     }, [selectedAppointment]);
 
     const canConfirmPresence = selectedAppointment?.status === "agendada";
+    const basePatientHasRecord = useMemo(
+        () => hasPatientRecord(selectedAppointment?.patient ?? null),
+        [selectedAppointment],
+    );
+    const patientHasRecord =
+        patientRecordStatus === "success"
+            ? true
+            : patientRecordStatus === "not-found"
+              ? false
+              : basePatientHasRecord;
 
     const handleOpenModal = (appointment: Appointment) => {
         setSelectedAppointment(appointment);
         setFormState(extractPatientForm(appointment));
         setFormError(null);
         setSuccessMessage(null);
+        setIsEditingPatientForm(false);
+        setPatientRecordAlert(null);
+        setPatientRecordStatus("idle");
+        const cpf = sanitizeCpf(appointment.patient.cpf ?? "");
+        if (cpf.length === 11) {
+            void loadPatientRecord(cpf);
+        } else if (cpf.length === 0) {
+            latestPatientRecordCpfRef.current = null;
+            setPatientRecordStatus("error");
+            setPatientRecordAlert("CPF do paciente não informado. Atualize os dados para criar a ficha.");
+        } else {
+            latestPatientRecordCpfRef.current = null;
+            setPatientRecordStatus("error");
+            setPatientRecordAlert("CPF do paciente inválido. Atualize os dados para criar a ficha.");
+        }
     };
 
     const handleCloseModal = () => {
@@ -463,6 +757,10 @@ export default function SecretaryDashboardPage() {
         setFormState(DEFAULT_FORM);
         setFormError(null);
         setSuccessMessage(null);
+        setIsEditingPatientForm(false);
+        setPatientRecordStatus("idle");
+        setPatientRecordAlert(null);
+        latestPatientRecordCpfRef.current = null;
     };
 
     const handleFieldChange = (field: keyof PatientFormState, value: string) => {
@@ -470,6 +768,25 @@ export default function SecretaryDashboardPage() {
             ...prev,
             [field]: value,
         }));
+    };
+
+    const handleTogglePatientFormEditing = () => {
+        setIsEditingPatientForm((prev) => {
+            const nextValue = !prev;
+            if (!prev && nextValue && patientFormRef.current) {
+                patientFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                const firstField =
+                    patientFormRef.current.querySelector<HTMLElement>("input, select, textarea");
+                if (firstField) {
+                    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+                        window.requestAnimationFrame(() => firstField.focus());
+                    } else {
+                        firstField.focus();
+                    }
+                }
+            }
+            return nextValue;
+        });
     };
 
     const goToPreviousPage = () => {
@@ -490,9 +807,10 @@ export default function SecretaryDashboardPage() {
     };
 
     const handleSubmit = async () => {
-        if (!selectedAppointment || !canConfirmPresence) return;
+        if (!selectedAppointment || !canConfirmPresence || isConfirming) return;
+        const presenceConfirmedAt = getBrasiliaIsoTimestamp();
 
-        const trimmed = {
+        const trimmed: SanitizedPatientForm = {
             fullName: formState.fullName.trim(),
             cpf: sanitizeCpf(formState.cpf),
             birthDate: normalizeBirthDateInput(formState.birthDate),
@@ -503,7 +821,19 @@ export default function SecretaryDashboardPage() {
             address: formState.address.trim(),
             insuranceProvider: formState.insuranceProvider.trim(),
             insuranceNumber: formState.insuranceNumber.trim(),
+            responsibleName: formState.responsibleName.trim(),
+            responsibleKinship: formState.responsibleKinship.trim(),
+            responsibleCpf: sanitizeCpf(formState.responsibleCpf),
+            responsiblePhone: sanitizePhone(formState.responsiblePhone),
         };
+
+        const patientAge = calculateAgeFromIso(trimmed.birthDate);
+        const isMinor = patientAge !== null && patientAge < 18;
+        const hasResponsibleInfo =
+            trimmed.responsibleName.length > 0 ||
+            trimmed.responsibleKinship.length > 0 ||
+            trimmed.responsibleCpf.length > 0 ||
+            trimmed.responsiblePhone.length > 0;
 
         if (!trimmed.fullName || !trimmed.cpf || trimmed.cpf.length !== 11) {
             setFormError("Informe o nome completo e um CPF válido para o paciente.");
@@ -525,32 +855,125 @@ export default function SecretaryDashboardPage() {
             setFormError("Informe o endereço completo do paciente.");
             return;
         }
+        if (isMinor) {
+            if (!trimmed.responsibleName || !trimmed.responsibleKinship) {
+                setFormError("Informe o nome e o grau de parentesco do responsável pelo paciente menor de idade.");
+                return;
+            }
+            if (!trimmed.responsibleCpf || trimmed.responsibleCpf.length !== 11) {
+                setFormError("Informe um CPF válido para o responsável.");
+                return;
+            }
+            if (!trimmed.responsiblePhone || trimmed.responsiblePhone.length < 10) {
+                setFormError("Informe um telefone válido para o responsável.");
+                return;
+            }
+        }
 
+        const appointmentId = selectedAppointment.id;
+        setIsConfirming(true);
         try {
-            const updatedAppointment = await confirmAttendance({
-                appointmentId: selectedAppointment.id,
+            const hasLegalResponsible = isMinor || hasResponsibleInfo;
+            const patientPayload = {
                 fullName: trimmed.fullName,
                 cpf: trimmed.cpf,
                 birthDate: trimmed.birthDate,
                 motherName: trimmed.motherName,
                 sex: trimmed.sex,
                 email: trimmed.email || null,
-                phone: trimmed.phone,
-                address: trimmed.address,
-                insuranceProvider: trimmed.insuranceProvider || null,
-                insuranceNumber: trimmed.insuranceNumber || null,
+                contactPhone: trimmed.phone,
+                fullAddress: trimmed.address,
+                hasLegalResponsible,
+                responsible: hasLegalResponsible
+                    ? {
+                          fullName: trimmed.responsibleName || null,
+                          relationship: trimmed.responsibleKinship || null,
+                          cpf: trimmed.responsibleCpf || null,
+                          phone: trimmed.responsiblePhone || null,
+                      }
+                    : null,
+                healthInsurance: trimmed.insuranceProvider
+                    ? {
+                          name: trimmed.insuranceProvider,
+                      }
+                    : null,
+                presenceConfirmedAt,
+            };
+
+            const patientRecordResponse = await jsonPost<PatientRecordUpsertResponse>("/api/patients", patientPayload);
+            setFormState(buildFormStateFromSanitized(trimmed));
+            setPatientRecordStatus("success");
+            setPatientRecordAlert(null);
+            latestPatientRecordCpfRef.current = trimmed.cpf;
+            patientRecordCacheRef.current.set(trimmed.cpf, {
+                status: "success",
+                data: {
+                    fullName: trimmed.fullName,
+                    cpf: trimmed.cpf,
+                    birthDate: trimmed.birthDate,
+                    motherName: trimmed.motherName,
+                    sex: trimmed.sex,
+                    email: trimmed.email || null,
+                    contactPhone: trimmed.phone,
+                    fullAddress: trimmed.address,
+                    hasLegalResponsible,
+                    responsible: hasLegalResponsible
+                        ? {
+                              fullName: trimmed.responsibleName || null,
+                              relationship: trimmed.responsibleKinship || null,
+                              cpf: trimmed.responsibleCpf || null,
+                              phone: trimmed.responsiblePhone || null,
+                          }
+                        : null,
+                    healthInsurance: trimmed.insuranceProvider
+                        ? {
+                              name: trimmed.insuranceProvider,
+                          }
+                        : null,
+                    presenceConfirmedAt,
+                },
             });
-            await refetch();
-            if (updatedAppointment) {
-                setSelectedAppointment(updatedAppointment);
-                setFormState(extractPatientForm(updatedAppointment));
+            if (patientRecordResponse?.message) {
+                setSuccessMessage(patientRecordResponse.message);
+            } else {
+                setSuccessMessage("Ficha do paciente atualizada com sucesso.");
             }
+            setSelectedAppointment((current) =>
+                current && current.id === appointmentId
+                    ? {
+                          ...current,
+                          status: "confirmada",
+                          checkInAt: presenceConfirmedAt,
+                          presenceConfirmedAt,
+                      }
+                    : current,
+            );
+            await refetch();
+            setIsEditingPatientForm(false);
+            setSuccessMessage((prev) => {
+                const message = "Presença confirmada com sucesso!";
+                if (!prev || prev.includes(message)) return message;
+                return `${prev} ${message}`;
+            });
         } catch (err) {
+            const status = (err as Error & { status?: number }).status;
+            if (status === 401) {
+                clearTokens();
+                try {
+                    localStorage.removeItem("passmais:accessToken");
+                    localStorage.removeItem("passmais:role");
+                    localStorage.removeItem("passmais:fullName");
+                } catch {}
+                router.replace("/secretarias/convite");
+                return;
+            }
             setFormError(
                 err instanceof Error
                     ? err.message
-                    : "Não foi possível confirmar a presença. Tente novamente ou contate o suporte.",
+                    : "Não foi possível salvar a ficha do paciente. Verifique os dados e tente novamente.",
             );
+        } finally {
+            setIsConfirming(false);
         }
     };
 
@@ -599,7 +1022,31 @@ export default function SecretaryDashboardPage() {
                     </div>
                 </header>
 
-                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+                {showUnlinkedState ? (
+                    <section className="rounded-3xl border border-dashed border-gray-200 bg-white/70 p-8 text-center shadow-sm">
+                        <div className="mx-auto flex max-w-2xl flex-col items-center gap-4">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+                                <User2 className="h-6 w-6" />
+                            </div>
+                            <div className="space-y-2">
+                                <h2 className="text-xl font-semibold text-gray-900">Você não possui médicos vinculados</h2>
+                                <p className="text-sm text-gray-600">
+                                    Assim que o médico responsável liberar um novo convite, suas agendas voltarão a aparecer aqui.
+                                    Solicite um novo vínculo ao profissional ou fale com o suporte caso já tenha recebido o acesso.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => router.push("/secretarias/convite")}
+                                className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800"
+                            >
+                                Ir para página de convite
+                            </button>
+                        </div>
+                    </section>
+                ) : (
+                    <>
+                        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                     <div className="grid gap-4 md:grid-cols-4">
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -714,7 +1161,7 @@ export default function SecretaryDashboardPage() {
                         </div>
                     ) : error ? (
                         <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-700">
-                            <p>{error.message || "Não foi possível carregar os agendamentos."}</p>
+                            <p>{extractFriendlyErrorMessage(error)}</p>
                         </div>
                     ) : !selectedDoctor && doctors.length > 0 ? (
                         <div className="mt-6 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
@@ -856,6 +1303,8 @@ export default function SecretaryDashboardPage() {
                         </div>
                     )}
                 </section>
+                    </>
+                )}
             </div>
 
             {selectedAppointment ? (
@@ -940,167 +1389,428 @@ export default function SecretaryDashboardPage() {
                             </div>
                         ) : null}
 
-                        <div className="mt-8 space-y-2">
-                            <h3 className="text-sm font-semibold text-gray-900">Ficha do paciente</h3>
-                            <p className="text-sm text-gray-500">
-                                Crie ou atualize os dados do paciente para manter o cadastro em dia antes da consulta.
-                            </p>
+                        <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-gray-900">Ficha do paciente</h3>
+                                <p className="text-sm text-gray-500">
+                                    Crie ou atualize os dados do paciente para manter o cadastro em dia antes da consulta.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleTogglePatientFormEditing}
+                                className={`inline-flex items-center gap-3 rounded-2xl border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#5179EF] ${
+                                    patientHasRecord
+                                        ? "border-gray-200 bg-white text-gray-700 hover:border-[#5179EF]/60 hover:text-[#5179EF]"
+                                        : "border-[#5179EF] bg-[#5179EF]/10 text-[#5179EF] shadow-sm"
+                                }`}
+                                aria-label={isEditingPatientForm ? "Voltar para visualização da ficha" : "Editar ficha do paciente"}
+                                aria-pressed={isEditingPatientForm}
+                            >
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#5179EF] text-base" aria-hidden="true">
+                                    <span role="img" className="text-white">
+                                        ✏️
+                                    </span>
+                                </span>
+                                <span>
+                                    {isEditingPatientForm
+                                        ? "Visualizar ficha"
+                                        : patientHasRecord
+                                            ? "Editar ficha"
+                                            : "Criar ficha"}
+                                </span>
+                            </button>
                         </div>
 
+                        {patientRecordStatus === "loading" ? (
+                            <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                                Carregando ficha do paciente...
+                            </div>
+                        ) : null}
+
+                        {patientRecordAlert && patientRecordStatus !== "loading" ? (
+                            <div
+                                className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+                                    patientRecordStatus === "error"
+                                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                                        : "border-blue-200 bg-blue-50 text-blue-700"
+                                }`}
+                            >
+                                {patientRecordAlert}
+                            </div>
+                        ) : null}
+
                         <form
+                            ref={patientFormRef}
                             className="mt-6 space-y-5 text-sm text-gray-700"
                             onSubmit={(event) => {
                                 event.preventDefault();
                                 void handleSubmit();
                             }}
                         >
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Nome completo
-                                    </label>
-                                    <input
-                                        id="fullName"
-                                        name="fullName"
-                                        value={formState.fullName}
-                                        onChange={(event) => handleFieldChange("fullName", event.target.value)}
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="cpf" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        CPF
-                                    </label>
-                                    <input
-                                        id="cpf"
-                                        name="cpf"
-                                        value={formState.cpf}
-                                        onChange={(event) => handleFieldChange("cpf", maskCpf(event.target.value))}
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <label htmlFor="birthDate" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Data de nascimento
-                                    </label>
-                                    <input
-                                        id="birthDate"
-                                        name="birthDate"
-                                        value={formState.birthDate}
-                                        onChange={(event) => handleFieldChange("birthDate", maskBirthDate(event.target.value))}
-                                        placeholder="dd/mm/aaaa"
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="motherName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Nome da mãe
-                                    </label>
-                                    <input
-                                        id="motherName"
-                                        name="motherName"
-                                        value={formState.motherName}
-                                        onChange={(event) => handleFieldChange("motherName", event.target.value)}
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <div className="space-y-2">
-                                    <label htmlFor="sex" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Sexo
-                                    </label>
-                                    <select
-                                        id="sex"
-                                        name="sex"
-                                        value={formState.sex}
-                                        onChange={(event) => handleFieldChange("sex", event.target.value as SexOption)}
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    >
-                                        {SEX_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        E-mail (opcional)
-                                    </label>
-                                    <input
-                                        id="email"
-                                        name="email"
-                                        type="email"
-                                        value={formState.email}
-                                        onChange={(event) => handleFieldChange("email", event.target.value)}
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Telefone de contato
-                                    </label>
-                                    <input
-                                        id="phone"
-                                        name="phone"
-                                        value={formState.phone}
-                                        onChange={(event) => handleFieldChange("phone", maskPhone(event.target.value))}
-                                        placeholder="(11) 98888-7777"
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label htmlFor="address" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                    Endereço completo
-                                </label>
-                                <textarea
-                                    id="address"
-                                    name="address"
-                                    value={formState.address}
-                                    onChange={(event) => handleFieldChange("address", event.target.value)}
-                                    rows={3}
-                                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                    required
-                                />
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <label htmlFor="insuranceProvider" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Convênio
-                                    </label>
-                                    <input
-                                        id="insuranceProvider"
-                                        name="insuranceProvider"
-                                        value={formState.insuranceProvider}
-                                        onChange={(event) => handleFieldChange("insuranceProvider", event.target.value)}
-                                        placeholder="Nome do convênio"
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label htmlFor="insuranceNumber" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        Número da carteirinha
-                                    </label>
-                                    <input
-                                        id="insuranceNumber"
-                                        name="insuranceNumber"
-                                        value={formState.insuranceNumber}
-                                        onChange={(event) => handleFieldChange("insuranceNumber", event.target.value)}
-                                        placeholder="Código do convênio"
-                                        className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
-                                    />
-                                </div>
-                            </div>
+                            {!isEditingPatientForm ? (
+                                patientRecordStatus === "not-found" ? (
+                                    <div className="rounded-3xl border border-dashed border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-600">
+                                        Nenhuma ficha encontrada para este paciente. Utilize o botão ✏️ para iniciar a ficha antes
+                                        da consulta.
+                                    </div>
+                                ) : patientHasRecord ? (
+                                    <>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Nome completo
+                                                </p>
+                                                <p className="mt-2 font-semibold text-gray-900">
+                                                    {formatDisplayValue(formState.fullName)}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    CPF
+                                                </p>
+                                                <p className="mt-2 font-medium text-gray-900">
+                                                    {formatDisplayValue(formState.cpf)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Data de nascimento
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.birthDate)}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Nome da mãe
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.motherName)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-3">
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Sexo
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.sex)}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    E-mail
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.email, "Não informado")}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Telefone de contato
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.phone)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                Endereço completo
+                                            </p>
+                                            <p className="mt-2 whitespace-pre-line text-gray-800">
+                                                {formatDisplayValue(formState.address)}
+                                            </p>
+                                        </div>
+                                        <div className="space-y-3 rounded-3xl border border-dashed border-gray-200 bg-gray-50/80 p-4">
+                                            <div className="space-y-1">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                    Responsável (se criança ou incapaz)
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Preencha os dados somente quando houver responsável pelo atendimento.
+                                                </p>
+                                            </div>
+                                            <div className="grid gap-4 md:grid-cols-2">
+                                                <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4">
+                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                        Nome do responsável
+                                                    </p>
+                                                    <p className="mt-2 text-gray-800">
+                                                        {formatDisplayValue(formState.responsibleName, "Não informado")}
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4">
+                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                        Grau de parentesco
+                                                    </p>
+                                                    <p className="mt-2 text-gray-800">
+                                                        {formatDisplayValue(formState.responsibleKinship, "Não informado")}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid gap-4 md:grid-cols-2">
+                                                <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4">
+                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                        CPF do responsável
+                                                    </p>
+                                                    <p className="mt-2 text-gray-800">
+                                                        {formatDisplayValue(formState.responsibleCpf, "Não informado")}
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4">
+                                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                        Telefone do responsável
+                                                    </p>
+                                                    <p className="mt-2 text-gray-800">
+                                                        {formatDisplayValue(formState.responsiblePhone, "Não informado")}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Convênio
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.insuranceProvider, "Não informado")}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    Número da carteirinha
+                                                </p>
+                                                <p className="mt-2 text-gray-800">
+                                                    {formatDisplayValue(formState.insuranceNumber, "Não informado")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : patientRecordStatus === "loading" || patientRecordStatus === "idle" ? null : (
+                                    <div className="rounded-3xl border border-dashed border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-600">
+                                        Não foi possível exibir os dados do paciente. Utilize o botão ✏️ para atualizar a ficha.
+                                    </div>
+                                )
+                            ) : (
+                                <>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Nome completo
+                                            </label>
+                                            <input
+                                                id="fullName"
+                                                name="fullName"
+                                                value={formState.fullName}
+                                                onChange={(event) => handleFieldChange("fullName", event.target.value)}
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="cpf" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                CPF
+                                            </label>
+                                            <input
+                                                id="cpf"
+                                                name="cpf"
+                                                value={formState.cpf}
+                                                onChange={(event) => handleFieldChange("cpf", maskCpf(event.target.value))}
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label htmlFor="birthDate" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Data de nascimento
+                                            </label>
+                                            <input
+                                                id="birthDate"
+                                                name="birthDate"
+                                                value={formState.birthDate}
+                                                onChange={(event) => handleFieldChange("birthDate", maskBirthDate(event.target.value))}
+                                                placeholder="dd/mm/aaaa"
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="motherName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Nome da mãe
+                                            </label>
+                                            <input
+                                                id="motherName"
+                                                name="motherName"
+                                                value={formState.motherName}
+                                                onChange={(event) => handleFieldChange("motherName", event.target.value)}
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-3">
+                                        <div className="space-y-2">
+                                            <label htmlFor="sex" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Sexo
+                                            </label>
+                                            <select
+                                                id="sex"
+                                                name="sex"
+                                                value={formState.sex}
+                                                onChange={(event) => handleFieldChange("sex", event.target.value as SexOption)}
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            >
+                                                {SEX_OPTIONS.map((option) => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                E-mail (opcional)
+                                            </label>
+                                            <input
+                                                id="email"
+                                                name="email"
+                                                type="email"
+                                                value={formState.email}
+                                                onChange={(event) => handleFieldChange("email", event.target.value)}
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Telefone de contato
+                                            </label>
+                                            <input
+                                                id="phone"
+                                                name="phone"
+                                                value={formState.phone}
+                                                onChange={(event) => handleFieldChange("phone", maskPhone(event.target.value))}
+                                                placeholder="(11) 98888-7777"
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label htmlFor="address" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                            Endereço completo
+                                        </label>
+                                        <textarea
+                                            id="address"
+                                            name="address"
+                                            value={formState.address}
+                                            onChange={(event) => handleFieldChange("address", event.target.value)}
+                                            rows={3}
+                                            className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="space-y-3 rounded-3xl border border-dashed border-gray-200 bg-gray-50/80 p-4">
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Responsável (se criança ou incapaz)
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                Preencha os dados abaixo somente quando o atendimento for realizado por um responsável legal.
+                                            </p>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <label htmlFor="responsibleName" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                    Nome do responsável
+                                                </label>
+                                                <input
+                                                    id="responsibleName"
+                                                    name="responsibleName"
+                                                    value={formState.responsibleName}
+                                                    onChange={(event) => handleFieldChange("responsibleName", event.target.value)}
+                                                    className="h-11 w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label htmlFor="responsibleKinship" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                    Grau de parentesco
+                                                </label>
+                                                <input
+                                                    id="responsibleKinship"
+                                                    name="responsibleKinship"
+                                                    value={formState.responsibleKinship}
+                                                    onChange={(event) => handleFieldChange("responsibleKinship", event.target.value)}
+                                                    className="h-11 w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <label htmlFor="responsibleCpf" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                    CPF do responsável
+                                                </label>
+                                                <input
+                                                    id="responsibleCpf"
+                                                    name="responsibleCpf"
+                                                    value={formState.responsibleCpf}
+                                                    onChange={(event) => handleFieldChange("responsibleCpf", maskCpf(event.target.value))}
+                                                    className="h-11 w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                    placeholder="000.000.000-00"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label htmlFor="responsiblePhone" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                    Telefone do responsável
+                                                </label>
+                                                <input
+                                                    id="responsiblePhone"
+                                                    name="responsiblePhone"
+                                                    value={formState.responsiblePhone}
+                                                    onChange={(event) => handleFieldChange("responsiblePhone", maskPhone(event.target.value))}
+                                                    className="h-11 w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                                    placeholder="(11) 97777-6666"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label htmlFor="insuranceProvider" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Convênio
+                                            </label>
+                                            <input
+                                                id="insuranceProvider"
+                                                name="insuranceProvider"
+                                                value={formState.insuranceProvider}
+                                                onChange={(event) => handleFieldChange("insuranceProvider", event.target.value)}
+                                                placeholder="Nome do convênio"
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="insuranceNumber" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Número da carteirinha
+                                            </label>
+                                            <input
+                                                id="insuranceNumber"
+                                                name="insuranceNumber"
+                                                value={formState.insuranceNumber}
+                                                onChange={(event) => handleFieldChange("insuranceNumber", event.target.value)}
+                                                placeholder="Código do convênio"
+                                                className="h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700 outline-none transition focus:border-[#5179EF] focus:ring-2 focus:ring-[#5179EF]/20"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                             {formError ? (
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
