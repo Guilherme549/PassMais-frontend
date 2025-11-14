@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AlertTriangle,
     AlertCircle,
@@ -20,9 +20,12 @@ import {
     X,
     type LucideIcon,
 } from "lucide-react";
+import { jsonGet } from "@/lib/api";
+import { extractDoctorIdFromToken } from "@/lib/token";
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 const PAGE_SIZE = 20;
+const APPOINTMENTS_POLL_INTERVAL = 30_000;
 
 export type AppointmentStatus = "agendada" | "confirmada" | "em-andamento" | "concluida" | "cancelada";
 export type AlertType = "alergia" | "risco" | "interacao";
@@ -78,12 +81,41 @@ interface AppointmentPatient {
     id: string;
     name: string;
     birthDate?: string;
+    cpf?: string;
     gender?: string;
     email?: string;
     emailMasked?: boolean;
     address?: string;
     addressMasked?: boolean;
     avatarUrl?: string;
+    phone?: string;
+    healthInsurance?: string;
+}
+
+interface PatientResponsibleInfo {
+    fullName?: string | null;
+    relationship?: string | null;
+    cpf?: string | null;
+    phone?: string | null;
+}
+
+interface PatientHealthInsuranceInfo {
+    name?: string | null;
+}
+
+interface PatientFileResponse {
+    fullName?: string | null;
+    cpf?: string | null;
+    birthDate?: string | null;
+    motherName?: string | null;
+    sex?: string | null;
+    email?: string | null;
+    contactPhone?: string | null;
+    fullAddress?: string | null;
+    hasLegalResponsible?: boolean;
+    responsible?: PatientResponsibleInfo | null;
+    healthInsurance?: PatientHealthInsuranceInfo | null;
+    presenceConfirmedAt?: string | null;
 }
 
 export interface ConsultationRecordSnapshot {
@@ -109,11 +141,141 @@ export interface AppointmentDetail {
     exams: PatientExam[];
     vaccines: PatientVaccine[];
     patient: AppointmentPatient;
+    presenceConfirmedAt?: string | null;
 }
 
 export interface VisaoGeralProps {
     appointments: AppointmentDetail[];
     isLoading?: boolean;
+}
+
+type DoctorAppointmentApiItem = {
+    id?: string | null;
+    doctorId?: string | null;
+    patientId?: string | null;
+    patientFullName?: string | null;
+    patientCpf?: string | null;
+    patientBirthDate?: string | null;
+    patientCellPhone?: string | null;
+    dateTime?: string | null;
+    bookedAt?: string | null;
+    value?: number | null;
+    location?: string | null;
+    reason?: string | null;
+    status?: string | null;
+    presenceConfirmedAt?: string | null;
+};
+
+type DoctorAppointmentsApiResponse = DoctorAppointmentApiItem[];
+
+type PatientPresenceAppointmentApiItem = {
+    id?: string | null;
+    doctorId?: string | null;
+    patientId?: string | null;
+    dateTime?: string | null;
+    bookedAt?: string | null;
+    value?: number | null;
+    location?: string | null;
+    patientFullName?: string | null;
+    patientCpf?: string | null;
+    patientBirthDate?: string | null;
+    patientCellPhone?: string | null;
+    reason?: string | null;
+    status?: string | null;
+    presenceConfirmedAt?: string | null;
+};
+
+type PatientPresenceApiEntry = {
+    patientFile?: PatientFileResponse | null;
+    appointment?: PatientPresenceAppointmentApiItem | null;
+};
+
+type PatientsPresenceApiResponse = PatientPresenceApiEntry[];
+
+const API_STATUS_NORMALIZATION: Record<string, AppointmentStatus> = {
+    PENDING: "agendada",
+    CONFIRMED: "confirmada",
+    IN_PROGRESS: "em-andamento",
+    INPROGRESS: "em-andamento",
+    "IN-PROGRESS": "em-andamento",
+    COMPLETED: "concluida",
+    FINISHED: "concluida",
+    DONE: "concluida",
+    CANCELLED: "cancelada",
+    CANCELED: "cancelada",
+};
+
+function normalizeApiStatus(value?: string | null): AppointmentStatus {
+    if (!value) return "agendada";
+    const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+    return API_STATUS_NORMALIZATION[normalized] ?? "agendada";
+}
+
+function mapDoctorAppointmentFromApi(item: DoctorAppointmentApiItem): AppointmentDetail {
+    const scheduledAt = item.dateTime ?? new Date().toISOString();
+    const appointmentId =
+        item.id ?? `${item.patientId ?? "appointment"}-${item.dateTime ?? Math.random().toString(36).slice(2)}`;
+    const patientName =
+        item.patientFullName && item.patientFullName.trim().length > 0 ? item.patientFullName : "Paciente";
+
+    return {
+        id: appointmentId,
+        scheduledAt,
+        status: normalizeApiStatus(item.status),
+        reason: item.reason ?? undefined,
+        symptomDuration: undefined,
+        preConsultNotes: undefined,
+        consultationRecord: undefined,
+        alerts: [],
+        medications: [],
+        exams: [],
+        vaccines: [],
+        presenceConfirmedAt: item.presenceConfirmedAt ?? null,
+        patient: {
+            id: item.patientId ?? "",
+            name: patientName,
+            cpf: item.patientCpf ?? undefined,
+            birthDate: item.patientBirthDate ?? undefined,
+            email: undefined,
+            phone: item.patientCellPhone ?? undefined,
+        },
+    };
+}
+
+function mapPresenceEntryToAppointment(entry: PatientPresenceApiEntry): AppointmentDetail {
+    const appointment = entry.appointment ?? {};
+    const patientFile = entry.patientFile ?? {};
+    const merged = mapDoctorAppointmentFromApi({
+        id: appointment.id,
+        doctorId: appointment.doctorId,
+        patientId: appointment.patientId ?? patientFile.cpf ?? undefined,
+        dateTime: appointment.dateTime,
+        bookedAt: appointment.bookedAt,
+        value: appointment.value,
+        location: appointment.location,
+        patientFullName: appointment.patientFullName ?? patientFile.fullName ?? undefined,
+        patientCpf: appointment.patientCpf ?? patientFile.cpf ?? undefined,
+        patientBirthDate: appointment.patientBirthDate ?? patientFile.birthDate ?? undefined,
+        patientCellPhone: appointment.patientCellPhone ?? patientFile.contactPhone ?? undefined,
+        reason: appointment.reason ?? undefined,
+        status: appointment.status ?? undefined,
+        presenceConfirmedAt: patientFile.presenceConfirmedAt ?? appointment.presenceConfirmedAt ?? null,
+    });
+
+    return {
+        ...merged,
+        presenceConfirmedAt: patientFile.presenceConfirmedAt ?? merged.presenceConfirmedAt ?? null,
+        patient: {
+            ...merged.patient,
+            name: patientFile.fullName ?? merged.patient.name,
+            cpf: patientFile.cpf ?? merged.patient.cpf,
+            birthDate: patientFile.birthDate ?? merged.patient.birthDate,
+            email: patientFile.email ?? merged.patient.email,
+            phone: patientFile.contactPhone ?? merged.patient.phone,
+            address: patientFile.fullAddress ?? merged.patient.address,
+            healthInsurance: patientFile.healthInsurance?.name ?? merged.patient.healthInsurance,
+        },
+    };
 }
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
@@ -277,34 +439,43 @@ function useConsultationRecord(appointment: AppointmentDetail | null, options?: 
     const [state, setState] = useState<ConsultationRecordStore | null>(null);
     const persistCallback = options?.onPersist;
     const finalizeCallback = options?.onFinalize;
+    const appointmentRef = useRef<AppointmentDetail | null>(appointment);
 
     useEffect(() => {
-        if (!appointment) {
-            setState(null);
+        appointmentRef.current = appointment;
+    }, [appointment]);
+
+    useEffect(() => {
+        const currentAppointment = appointmentRef.current;
+        const appointmentId = currentAppointment?.id ?? null;
+        if (!appointmentId || !currentAppointment) {
+            setState((existing) => (existing ? null : existing));
             return;
         }
 
         setState((current) => {
-            if (current && current.consultationId === appointment.id) {
+            if (current && current.consultationId === appointmentId) {
                 return current;
             }
 
-            const draft = createDraftFromAppointment(appointment);
+            const draft = createDraftFromAppointment(currentAppointment);
             return {
-                consultationId: appointment.id,
+                consultationId: appointmentId,
                 draft,
                 saved: cloneDraft(draft),
-                status: appointment.consultationRecord?.status ?? (appointment.status === "concluida" ? "finalized" : "draft"),
+                status:
+                    currentAppointment.consultationRecord?.status ??
+                    (currentAppointment.status === "concluida" ? "finalized" : "draft"),
                 isDirty: false,
                 isSaving: false,
-                lastSavedAt: appointment.consultationRecord?.lastSavedAt
-                    ? Date.parse(appointment.consultationRecord.lastSavedAt)
+                lastSavedAt: currentAppointment.consultationRecord?.lastSavedAt
+                    ? Date.parse(currentAppointment.consultationRecord.lastSavedAt)
                     : undefined,
                 lastError: null,
                 lastSaveOrigin: undefined,
             };
         });
-    }, [appointment]);
+    }, [appointment?.id]);
 
     const updateField = useCallback((field: ConsultationRecordFieldKey, value: string) => {
         setState((current) => {
@@ -509,10 +680,36 @@ function getAge(birthDate?: string) {
     return age;
 }
 
+function normalizeCpf(value?: string | null) {
+    if (!value) {
+        return "";
+    }
+    return value.replace(/\D/g, "").slice(0, 11);
+}
+
+function formatCpf(value?: string | null) {
+    const digits = normalizeCpf(value);
+    if (digits.length === 0) {
+        return "—";
+    }
+    if (digits.length !== 11) {
+        return digits;
+    }
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
 function maskValue(value?: string) {
     if (!value) return "—";
     if (value.length <= 6) return `${value.slice(0, 1)}***`;
     return `${value.slice(0, 3)}***${value.slice(-3)}`;
+}
+
+function maskCpf(value?: string) {
+    const digits = value?.replace(/\D/g, "");
+    if (!digits || digits.length < 2) {
+        return "—";
+    }
+    return `***.***.***-${digits.slice(-2)}`;
 }
 
 function getInitials(name: string) {
@@ -535,6 +732,24 @@ function isWithinNextHour(iso: string) {
     return diff >= 0 && diff <= 60 * 60 * 1000;
 }
 
+function appointmentArrivalTime(appointment: AppointmentDetail) {
+    return appointment.presenceConfirmedAt ?? null;
+}
+
+function mergeAppointmentDetails(base: AppointmentDetail, incoming: AppointmentDetail): AppointmentDetail {
+    return {
+        ...base,
+        reason: base.reason ?? incoming.reason,
+        symptomDuration: base.symptomDuration ?? incoming.symptomDuration,
+        preConsultNotes: base.preConsultNotes ?? incoming.preConsultNotes,
+        presenceConfirmedAt: incoming.presenceConfirmedAt ?? base.presenceConfirmedAt ?? null,
+        patient: {
+            ...base.patient,
+            ...incoming.patient,
+        },
+    };
+}
+
 export default function VisaoGeral({ appointments, isLoading = false }: VisaoGeralProps) {
     const [segment, setSegment] = useState<SegmentFilter>("today");
     const [search, setSearch] = useState("");
@@ -543,16 +758,191 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [selectedAppointment, setSelectedAppointment] = useState<AppointmentDetail | null>(null);
+    const [selectedSource, setSelectedSource] = useState<"list" | "presence" | null>(null);
     const [appointmentsState, setAppointmentsState] = useState(appointments);
     const [activeTab, setActiveTab] = useState<ConsultationTabKey>("resumo");
+    const [preferredInitialTab, setPreferredInitialTab] = useState<ConsultationTabKey | null>(null);
+    const [doctorId, setDoctorId] = useState<string | null>(null);
+    const [isFetchingAppointments, setIsFetchingAppointments] = useState(isLoading);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [patientFile, setPatientFile] = useState<PatientFileResponse | null>(null);
+    const [isPatientFileLoading, setIsPatientFileLoading] = useState(false);
+    const [patientFileError, setPatientFileError] = useState<string | null>(null);
+    const [presenceQueue, setPresenceQueue] = useState<AppointmentDetail[]>([]);
+    const [isPresenceLoading, setIsPresenceLoading] = useState(false);
+    const [presenceError, setPresenceError] = useState<string | null>(null);
+    const appointmentsRequestRef = useRef(false);
+    const presenceRequestRef = useRef(false);
+    const patientFileFetchKeyRef = useRef<string | null>(null);
+    const lastSelectedAppointmentIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         setAppointmentsState(appointments);
     }, [appointments]);
 
+    const fetchAppointments = useCallback(
+        async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
+            if (!doctorId || appointmentsRequestRef.current) {
+                return;
+            }
+
+            appointmentsRequestRef.current = true;
+            if (!silent) {
+                setFetchError(null);
+                setIsFetchingAppointments(true);
+            }
+
+            try {
+                const response = await jsonGet<DoctorAppointmentsApiResponse>(`/api/appointments/doctor/${doctorId}`, {
+                    signal,
+                });
+                const mapped = Array.isArray(response) ? response.map((item) => mapDoctorAppointmentFromApi(item)) : [];
+                setAppointmentsState(mapped);
+            } catch (error) {
+                if ((error as Error)?.name === "AbortError") {
+                    return;
+                }
+                if (!silent) {
+                    setFetchError(
+                        error instanceof Error ? error.message : "Não foi possível carregar as consultas do médico.",
+                    );
+                }
+            } finally {
+                appointmentsRequestRef.current = false;
+                if (!silent) {
+                    setIsFetchingAppointments(false);
+                }
+            }
+        },
+        [doctorId],
+    );
+
+    const fetchPresenceQueue = useCallback(
+        async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
+            if (presenceRequestRef.current) {
+                return;
+            }
+
+            presenceRequestRef.current = true;
+            if (!silent) {
+                setPresenceError(null);
+                setIsPresenceLoading(true);
+            }
+
+            try {
+                const today = getZonedDateString(new Date());
+                const response = await jsonGet<PatientsPresenceApiResponse>(`/api/patients/presence?date=${today}`, {
+                    signal,
+                });
+                const mapped = Array.isArray(response) ? response.map((entry) => mapPresenceEntryToAppointment(entry)) : [];
+                setPresenceQueue(mapped);
+            } catch (error) {
+                if ((error as Error)?.name === "AbortError") {
+                    return;
+                }
+                if (!silent) {
+                    setPresenceError(
+                        error instanceof Error
+                            ? error.message
+                            : "Não foi possível carregar os pacientes aguardando atendimento.",
+                    );
+                }
+            } finally {
+                presenceRequestRef.current = false;
+                if (!silent) {
+                    setIsPresenceLoading(false);
+                }
+            }
+        },
+        [],
+    );
+
     useEffect(() => {
-        setActiveTab("resumo");
-    }, [selectedAppointment?.id]);
+        if (typeof window === "undefined") {
+            return;
+        }
+        const storedDoctorId = window.localStorage.getItem("doctorId");
+        if (storedDoctorId) {
+            setDoctorId(storedDoctorId);
+            return;
+        }
+        const accessToken = window.localStorage.getItem("accessToken");
+        const derivedDoctorId = extractDoctorIdFromToken(accessToken);
+        if (derivedDoctorId) {
+            window.localStorage.setItem("doctorId", derivedDoctorId);
+            setDoctorId(derivedDoctorId);
+            return;
+        }
+        setFetchError("Não foi possível identificar o médico logado.");
+        setIsFetchingAppointments(false);
+    }, []);
+
+    useEffect(() => {
+        if (!doctorId) {
+            return;
+        }
+        const controller = new AbortController();
+        void fetchAppointments({ signal: controller.signal });
+        return () => {
+            controller.abort();
+        };
+    }, [doctorId, fetchAppointments]);
+
+    useEffect(() => {
+        if (!doctorId) {
+            return;
+        }
+        const interval = window.setInterval(() => {
+            void fetchAppointments({ silent: true });
+        }, APPOINTMENTS_POLL_INTERVAL);
+        return () => window.clearInterval(interval);
+    }, [doctorId, fetchAppointments]);
+
+    useEffect(() => {
+        if (!doctorId) {
+            return;
+        }
+        const controller = new AbortController();
+        void fetchPresenceQueue({ signal: controller.signal });
+        return () => {
+            controller.abort();
+        };
+    }, [doctorId, fetchPresenceQueue]);
+
+    useEffect(() => {
+        if (!doctorId) {
+            return;
+        }
+        const interval = window.setInterval(() => {
+            void fetchPresenceQueue({ silent: true });
+        }, APPOINTMENTS_POLL_INTERVAL);
+        return () => window.clearInterval(interval);
+    }, [doctorId, fetchPresenceQueue]);
+
+    const selectedAppointmentId = selectedAppointment?.id ?? null;
+
+    useEffect(() => {
+        if (!selectedAppointmentId) {
+            lastSelectedAppointmentIdRef.current = null;
+            if (preferredInitialTab !== null) {
+                setPreferredInitialTab(null);
+            }
+            setActiveTab("resumo");
+            return;
+        }
+
+        if (preferredInitialTab) {
+            setActiveTab(preferredInitialTab);
+            setPreferredInitialTab(null);
+            lastSelectedAppointmentIdRef.current = selectedAppointmentId;
+            return;
+        }
+
+        if (lastSelectedAppointmentIdRef.current !== selectedAppointmentId) {
+            lastSelectedAppointmentIdRef.current = selectedAppointmentId;
+            setActiveTab("resumo");
+        }
+    }, [preferredInitialTab, selectedAppointmentId]);
 
     const handlePersistRecord = useCallback((consultationId: string, draft: ConsultationRecordDraft) => {
         const isoTimestamp = new Date().toISOString();
@@ -657,8 +1047,11 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
     useEffect(() => {
         setFeedbackMessage(null);
     }, [selectedAppointment?.id]);
+    const hasPresenceConfirmation = Boolean(selectedAppointment?.presenceConfirmedAt);
     const isEditableStatus =
-        selectedAppointment != null && (selectedAppointment.status === "confirmada" || selectedAppointment.status === "em-andamento");
+        selectedAppointment != null &&
+        hasPresenceConfirmation &&
+        (selectedAppointment.status === "confirmada" || selectedAppointment.status === "em-andamento");
     const isRecordFinalized = recordState?.status === "finalized";
     const canEditConsultationRecord = Boolean(isEditableStatus && !isRecordFinalized);
     const recordDraft = recordState?.draft;
@@ -672,12 +1065,44 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
             ? { tone: "danger" as const, text: "Consulta cancelada — edição indisponível." }
             : selectedAppointment.status === "concluida" || isRecordFinalized
               ? { tone: "info" as const, text: "Consulta concluída — prontuário em modo leitura." }
-              : selectedAppointment.status === "agendada"
-                ? { tone: "warning" as const, text: "Consulta aguardando confirmação — edição disponível após confirmação." }
-                : null
+              : !hasPresenceConfirmation
+                ? { tone: "warning" as const, text: "Presença não confirmada — aguarde a secretaria finalizar o check-in." }
+                : selectedAppointment.status === "agendada"
+                    ? { tone: "warning" as const, text: "Consulta aguardando confirmação — edição disponível após confirmação." }
+                    : null
         : null;
-    const selectedPatientAge = selectedAppointment ? getAge(selectedAppointment.patient.birthDate) : null;
-    const saveButtonLabel = recordState?.lastSavedAt ? "Salvar alterações" : "Salvar rascunho";
+    const selectedPatientAge = selectedAppointment
+        ? getAge(patientFile?.birthDate ?? selectedAppointment.patient.birthDate)
+        : null;
+    const patientNameFromFile = patientFile?.fullName?.trim();
+    const patientDisplayName =
+        patientNameFromFile && patientNameFromFile.length > 0
+            ? patientNameFromFile
+            : selectedAppointment?.patient.name ?? "";
+    const patientCpfDisplay = formatCpf(patientFile?.cpf ?? selectedAppointment?.patient.cpf);
+    const patientBirthDateDisplay = patientFile?.birthDate ?? selectedAppointment?.patient.birthDate ?? null;
+    const patientContactDisplay =
+        patientFile?.contactPhone ??
+        selectedAppointment?.patient.phone ??
+        (selectedAppointment?.patient.emailMasked ? maskValue(selectedAppointment.patient.email) : selectedAppointment?.patient.email) ??
+        "—";
+    const patientInsuranceDisplay =
+        patientFile?.healthInsurance?.name ?? selectedAppointment?.patient.healthInsurance ?? "—";
+    const patientSexDisplay = patientFile?.sex ?? selectedAppointment?.patient.gender ?? "—";
+    const patientEmailDisplay =
+        patientFile?.email ??
+        (selectedAppointment?.patient.emailMasked ? maskValue(selectedAppointment.patient.email) : selectedAppointment?.patient.email) ??
+        "—";
+    const patientAddressDisplay =
+        patientFile?.fullAddress ??
+        (selectedAppointment?.patient.addressMasked ? maskValue(selectedAppointment.patient.address) : selectedAppointment?.patient.address) ??
+        "—";
+    const selectedArrivalIso = selectedAppointment ? appointmentArrivalTime(selectedAppointment) : null;
+    const patientArrivalLabel =
+        selectedArrivalIso != null ? `${formatDate(selectedArrivalIso)} às ${formatTime(selectedArrivalIso)}` : "—";
+    const isPresenceFlow = selectedSource === "presence";
+    const saveButtonLabel = isPresenceFlow ? "Salvar Observações" : recordState?.lastSavedAt ? "Salvar alterações" : "Salvar rascunho";
+    const finalizeButtonLabel = isPresenceFlow ? "Encerrar Consulta" : "Finalizar atendimento";
     const handleTabChange = useCallback((tab: ConsultationTabKey) => {
         setActiveTab(tab);
     }, []);
@@ -829,7 +1254,188 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
         setPage(1);
     };
 
-    const showSkeleton = isLoading;
+    const showSkeleton = isLoading || isFetchingAppointments;
+
+    const confirmedAppointments = useMemo(() => {
+        const shouldInclude = (appointment: AppointmentDetail) =>
+            Boolean(appointment.presenceConfirmedAt) &&
+            appointment.status !== "concluida" &&
+            appointment.status !== "cancelada";
+
+        const queue = new Map<string, AppointmentDetail>();
+
+        appointmentsState.forEach((appointment) => {
+            if (!shouldInclude(appointment)) {
+                return;
+            }
+            queue.set(appointment.id, appointment);
+        });
+
+        presenceQueue.forEach((appointment) => {
+            if (!shouldInclude(appointment)) {
+                return;
+            }
+            const existing = queue.get(appointment.id);
+            if (existing) {
+                queue.set(appointment.id, mergeAppointmentDetails(existing, appointment));
+            } else {
+                queue.set(appointment.id, appointment);
+            }
+        });
+
+        return Array.from(queue.values()).sort((a, b) => {
+            const timeA = appointmentArrivalTime(a);
+            const timeB = appointmentArrivalTime(b);
+            if (!timeA && !timeB) return 0;
+            if (!timeA) return 1;
+            if (!timeB) return -1;
+            return new Date(timeA).getTime() - new Date(timeB).getTime();
+        });
+    }, [appointmentsState, presenceQueue]);
+
+    const handleOpenAppointment = useCallback(
+        (appointment: AppointmentDetail, options?: { source?: "list" | "presence"; initialTab?: ConsultationTabKey }) => {
+            setSelectedSource(options?.source ?? null);
+            setPreferredInitialTab(options?.initialTab ?? null);
+            setSelectedAppointment(appointment);
+        },
+        [],
+    );
+
+    const handleCloseModal = useCallback(() => {
+        setSelectedAppointment(null);
+        setSelectedSource(null);
+        setPreferredInitialTab(null);
+    }, []);
+
+    useEffect(() => {
+        if (!selectedAppointment) {
+            return;
+        }
+        const existsInAppointments = appointmentsState.some((appointment) => appointment.id === selectedAppointment.id);
+        const existsInPresence = presenceQueue.some((appointment) => appointment.id === selectedAppointment.id);
+        if (!existsInAppointments && !existsInPresence) {
+            handleCloseModal();
+        }
+    }, [appointmentsState, presenceQueue, handleCloseModal, selectedAppointment]);
+
+    useEffect(() => {
+        if (!selectedAppointment) {
+            return;
+        }
+        const incoming = presenceQueue.find((appointment) => appointment.id === selectedAppointment.id);
+        if (!incoming) {
+            return;
+        }
+        setSelectedAppointment((current) => (current ? mergeAppointmentDetails(current, incoming) : current));
+    }, [presenceQueue, selectedAppointment]);
+
+    const handleStartConsultation = useCallback(
+        (appointment: AppointmentDetail) => {
+            if (!appointment.presenceConfirmedAt) {
+                setFeedbackMessage("Finalize o check-in da secretaria para iniciar a consulta.");
+                return;
+            }
+            handleOpenAppointment(appointment, { source: "presence", initialTab: "consulta" });
+        },
+        [handleOpenAppointment, setFeedbackMessage],
+    );
+
+    const normalizedSelectedPatientCpf = selectedAppointment?.patient.cpf
+        ? normalizeCpf(selectedAppointment.patient.cpf)
+        : "";
+
+    useEffect(() => {
+        if (!selectedAppointmentId) {
+            setPatientFile(null);
+            setPatientFileError(null);
+            setIsPatientFileLoading(false);
+            patientFileFetchKeyRef.current = null;
+            return;
+        }
+
+        if (!normalizedSelectedPatientCpf) {
+            setPatientFile(null);
+            setPatientFileError("CPF do paciente não informado.");
+            setIsPatientFileLoading(false);
+            patientFileFetchKeyRef.current = null;
+            return;
+        }
+
+        const fetchKey = `${selectedAppointmentId}:${normalizedSelectedPatientCpf}`;
+        if (patientFileFetchKeyRef.current === fetchKey) {
+            return;
+        }
+        patientFileFetchKeyRef.current = fetchKey;
+        setPatientFile(null);
+        setPatientFileError(null);
+
+        let cancelled = false;
+        const controller = new AbortController();
+
+        const loadPatientFile = async () => {
+            setIsPatientFileLoading(true);
+            setPatientFileError(null);
+            try {
+                const response = await jsonGet<PatientFileResponse>(`/api/patients/file/${normalizedSelectedPatientCpf}`, {
+                    signal: controller.signal,
+                });
+                if (cancelled) {
+                    return;
+                }
+                setPatientFile(response);
+            } catch (error) {
+                if (cancelled) {
+                    return;
+                }
+                if ((error as Error)?.name === "AbortError") {
+                    return;
+                }
+                setPatientFile(null);
+                setPatientFileError(
+                    error instanceof Error ? error.message : "Não foi possível carregar os dados do paciente.",
+                );
+            } finally {
+                if (!cancelled) {
+                    setIsPatientFileLoading(false);
+                }
+            }
+        };
+
+        void loadPatientFile();
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [normalizedSelectedPatientCpf, selectedAppointmentId]);
+
+    useEffect(() => {
+        if (!selectedAppointment) {
+            return;
+        }
+        if (!patientFile?.presenceConfirmedAt) {
+            return;
+        }
+        setAppointmentsState((current) =>
+            current.map((appointment) =>
+                appointment.id === selectedAppointment.id
+                    ? {
+                          ...appointment,
+                          presenceConfirmedAt: appointment.presenceConfirmedAt ?? patientFile.presenceConfirmedAt ?? null,
+                      }
+                    : appointment,
+            ),
+        );
+        setSelectedAppointment((current) =>
+            current
+                ? {
+                      ...current,
+                      presenceConfirmedAt: current.presenceConfirmedAt ?? patientFile.presenceConfirmedAt ?? null,
+                  }
+                : current,
+        );
+    }, [patientFile?.presenceConfirmedAt, selectedAppointment]);
 
     return (
         <section className="space-y-6">
@@ -839,6 +1445,98 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                     Visualize suas consultas por período, acompanhe alertas clínicos e acesse os detalhes do paciente com segurança.
                 </p>
             </header>
+
+            {fetchError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {fetchError}
+                </div>
+            )}
+
+            <section className="rounded-2xl border border-[#5179EF]/15 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#5179EF]">Chegadas confirmadas</p>
+                        <h2 className="text-xl font-semibold text-gray-900">Pacientes aguardando atendimento</h2>
+                        <p className="text-sm text-gray-500">Atualizado após a secretaria finalizar o check-in.</p>
+                    </div>
+                    {confirmedAppointments.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#5179EF]/10 px-4 py-1 text-xs font-semibold text-[#1d3a8c]">
+                            {confirmedAppointments.length} aguardando
+                        </span>
+                    ) : null}
+                </div>
+
+                {presenceError ? (
+                    <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                        {presenceError}
+                    </div>
+                ) : null}
+
+                {isPresenceLoading && confirmedAppointments.length === 0 ? (
+                    <p className="mt-6 text-sm text-gray-500">Carregando pacientes aguardando...</p>
+                ) : confirmedAppointments.length === 0 ? (
+                    <p className="mt-6 text-sm text-gray-500">Nenhum paciente com presença confirmada no momento.</p>
+                ) : (
+                    <div className="mt-6 grid gap-4 md:grid-cols-2">
+                        {confirmedAppointments.map((appointment) => {
+                            const arrivalIso = appointmentArrivalTime(appointment);
+                            const arrivalDate = arrivalIso ? formatDate(arrivalIso) : "—";
+                            const arrivalTime = arrivalIso ? formatTime(arrivalIso) : "—";
+                            const maskedCpf = maskCpf(appointment.patient.cpf);
+
+                            return (
+                                <article
+                                    key={`presence-${appointment.id}`}
+                                    className="rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-[#F7F9FF] p-5 shadow-sm"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#5179EF]/10 text-sm font-semibold text-[#5179EF]">
+                                            {appointment.patient.avatarUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img
+                                                    src={appointment.patient.avatarUrl}
+                                                    alt={`Foto de ${appointment.patient.name}`}
+                                                    className="h-12 w-12 rounded-full object-cover"
+                                                    loading="lazy"
+                                                />
+                                            ) : (
+                                                <span>{getInitials(appointment.patient.name)}</span>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-base font-semibold text-gray-900">{appointment.patient.name}</p>
+                                            <p className="text-xs text-gray-500">{maskedCpf}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Horário de chegada</p>
+                                            <p className="text-sm font-semibold text-gray-900">
+                                                {arrivalDate} às {arrivalTime}
+                                            </p>
+                                        </div>
+                                        <span className="inline-flex items-center gap-2 rounded-full bg-[#5179EF]/10 px-3 py-1 text-xs font-semibold text-[#1d3a8c]">
+                                            Presença confirmada
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+                                        <span>Status: {STATUS_LABEL[appointment.status]}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleStartConsultation(appointment)}
+                                            className="inline-flex items-center justify-center rounded-full bg-[#5179EF] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#3f63d6]"
+                                        >
+                                            Iniciar consulta
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
 
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1054,7 +1752,7 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                         <td className="px-4 py-4 text-right">
                                             <button
                                                 type="button"
-                                                onClick={() => setSelectedAppointment(appointment)}
+                                                onClick={() => handleOpenAppointment(appointment, { source: "list" })}
                                                 className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#5179EF] ring-1 ring-[#5179EF] transition hover:bg-[#5179EF] hover:text-white"
                                             >
                                                 Visualizar
@@ -1106,7 +1804,7 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                     <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-8 shadow-2xl">
                         <button
                             type="button"
-                            onClick={() => setSelectedAppointment(null)}
+                            onClick={handleCloseModal}
                             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200"
                             aria-label="Fechar detalhes"
                         >
@@ -1122,18 +1820,18 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                                 // eslint-disable-next-line @next/next/no-img-element
                                                 <img
                                                     src={selectedAppointment.patient.avatarUrl}
-                                                    alt={`Foto de ${selectedAppointment.patient.name}`}
+                                                    alt={`Foto de ${patientDisplayName}`}
                                                     className="h-14 w-14 rounded-full object-cover"
                                                     loading="lazy"
                                                 />
                                             ) : (
-                                                <span>{getInitials(selectedAppointment.patient.name)}</span>
+                                                <span>{getInitials(patientDisplayName || selectedAppointment.patient.name)}</span>
                                             )}
                                         </div>
                                         <div className="space-y-2">
                                             <p className="text-xs font-semibold uppercase tracking-wide text-[#5179EF]">Consulta atual</p>
                                             <div className="flex flex-wrap items-center gap-3">
-                                                <h2 className="text-2xl font-semibold text-gray-900">{selectedAppointment.patient.name}</h2>
+                                                <h2 className="text-2xl font-semibold text-gray-900">{patientDisplayName}</h2>
                                                 <span className="text-sm text-gray-500">
                                                     {selectedPatientAge != null ? `${selectedPatientAge} anos` : "Idade não informada"}
                                                 </span>
@@ -1154,6 +1852,38 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                                         Registro finalizado
                                                     </span>
                                                 )}
+                                            </div>
+                                            <dl className="mt-3 grid gap-3 text-xs text-gray-600 sm:grid-cols-3">
+                                                <div>
+                                                    <dt className="font-semibold uppercase tracking-wide text-gray-400">CPF</dt>
+                                                    <dd className="text-sm font-semibold text-gray-900">{patientCpfDisplay}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="font-semibold uppercase tracking-wide text-gray-400">Contato</dt>
+                                                    <dd className="text-sm font-semibold text-gray-900">{patientContactDisplay}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="font-semibold uppercase tracking-wide text-gray-400">Convênio</dt>
+                                                    <dd className="text-sm font-semibold text-gray-900">{patientInsuranceDisplay}</dd>
+                                                </div>
+                                            </dl>
+                                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Chegada registrada:{" "}
+                                                <span className="text-sm font-semibold text-gray-900">{patientArrivalLabel}</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 pt-2">
+                                                {isPatientFileLoading ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-[#5179EF]/30 bg-[#5179EF]/10 px-3 py-1 text-xs font-semibold text-[#1d3a8c]">
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                                        Buscando dados do paciente…
+                                                    </span>
+                                                ) : null}
+                                                {patientFileError ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                                                        <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                                                        {patientFileError}
+                                                    </span>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </div>
@@ -1294,16 +2024,16 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                                         // eslint-disable-next-line @next/next/no-img-element
                                                         <img
                                                             src={selectedAppointment.patient.avatarUrl}
-                                                            alt={`Foto de ${selectedAppointment.patient.name}`}
+                                                            alt={`Foto de ${patientDisplayName}`}
                                                             className="h-16 w-16 rounded-full object-cover"
                                                             loading="lazy"
                                                         />
                                                     ) : (
-                                                        <span>{getInitials(selectedAppointment.patient.name)}</span>
+                                                        <span>{getInitials(patientDisplayName || selectedAppointment.patient.name)}</span>
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <p className="text-lg font-semibold text-gray-900">{selectedAppointment.patient.name}</p>
+                                                    <p className="text-lg font-semibold text-gray-900">{patientDisplayName}</p>
                                                     <p className="text-sm text-gray-500">
                                                         ID do paciente: <span className="font-mono text-gray-700">{selectedAppointment.patient.id}</span>
                                                     </p>
@@ -1311,19 +2041,22 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                             </div>
                                             <div className="grid gap-2 text-sm text-gray-600">
                                                 <p>
-                                                    <strong className="text-gray-700">Idade:</strong> {getAge(selectedAppointment.patient.birthDate) ?? "—"}
-                                                    {selectedAppointment.patient.birthDate && (
-                                                        <span className="text-xs text-gray-400"> · {formatDate(selectedAppointment.patient.birthDate)}</span>
+                                                    <strong className="text-gray-700">Idade:</strong> {selectedPatientAge ?? "—"}
+                                                    {patientBirthDateDisplay && (
+                                                        <span className="text-xs text-gray-400">
+                                                            {" "}
+                                                            · {formatDate(patientBirthDateDisplay)}
+                                                        </span>
                                                     )}
                                                 </p>
                                                 <p>
-                                                    <strong className="text-gray-700">Sexo:</strong> {selectedAppointment.patient.gender ? selectedAppointment.patient.gender : "—"}
+                                                    <strong className="text-gray-700">Sexo:</strong> {patientSexDisplay}
                                                 </p>
                                                 <p>
-                                                    <strong className="text-gray-700">E-mail:</strong> {selectedAppointment.patient.emailMasked ? maskValue(selectedAppointment.patient.email) : selectedAppointment.patient.email ?? "—"}
+                                                    <strong className="text-gray-700">E-mail:</strong> {patientEmailDisplay}
                                                 </p>
                                                 <p>
-                                                    <strong className="text-gray-700">Endereço:</strong> {selectedAppointment.patient.addressMasked ? maskValue(selectedAppointment.patient.address) : selectedAppointment.patient.address ?? "—"}
+                                                    <strong className="text-gray-700">Endereço:</strong> {patientAddressDisplay}
                                                 </p>
                                             </div>
                                         </div>
@@ -1695,9 +2428,9 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                                                 onClick={handleFinalize}
                                                 className="inline-flex items-center justify-center rounded-full border border-emerald-500 px-5 py-2 text-sm font-semibold text-emerald-600 shadow-sm transition hover:bg-emerald-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
                                                 disabled={!canEditConsultationRecord || !recordReady || isSavingRecord}
-                                                aria-label="Finalizar atendimento"
+                                                aria-label={finalizeButtonLabel}
                                             >
-                                                Finalizar atendimento
+                                                {finalizeButtonLabel}
                                             </button>
                                             <button
                                                 type="button"
