@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NavBar from "@/components/NavBar";
 import Link from "next/link";
 import { X } from "lucide-react";
@@ -46,6 +46,313 @@ function writeActiveAppointments(records: ActiveAppointmentRecord[]) {
     } catch {
         // ignore
     }
+}
+
+type GenericAppointmentRecord = Record<string, unknown>;
+
+const ACTIVE_STATUS_TOKENS = new Set([
+    "AGENDADA",
+    "AGENDADO",
+    "PENDENTE",
+    "PENDING",
+    "CONFIRMADA",
+    "CONFIRMADO",
+    "CONFIRMED",
+    "SCHEDULED",
+    "EM_ANDAMENTO",
+    "IN_PROGRESS",
+]);
+
+const STATUS_PATHS = ["status", "appointmentStatus", "situation", "state", "currentStatus"];
+const ISO_DATETIME_PATHS = [
+    "scheduledAt",
+    "appointmentDateTime",
+    "scheduledDateTime",
+    "startDateTime",
+    "startAt",
+    "dateTime",
+    "datetime",
+    "appointment.scheduledAt",
+    "appointment.dateTime",
+];
+const DATE_PATHS = [
+    "date",
+    "appointmentDate",
+    "scheduledDate",
+    "day",
+    "appointment.date",
+    "slot.date",
+];
+const TIME_PATHS = [
+    "time",
+    "appointmentTime",
+    "scheduledTime",
+    "hour",
+    "slot.time",
+    "slotTime",
+];
+const DOCTOR_ID_PATHS = [
+    "doctorId",
+    "doctor_id",
+    "doctor.id",
+    "doctor.doctorId",
+    "doctor.externalId",
+    "doctor.externalID",
+    "medico.id",
+    "medico.doctorId",
+    "professional.id",
+    "professional.doctorId",
+    "professionalId",
+    "medicalId",
+    "medicoId",
+    "schedule.doctorId",
+    "schedule.doctor.id",
+];
+const PATIENT_ID_PATHS = [
+    "patientId",
+    "patient_id",
+    "patient.id",
+    "patient.patientId",
+    "patient.externalId",
+    "patient.userId",
+    "patient.uuid",
+    "patientInfo.id",
+    "patientDetails.id",
+    "paciente.id",
+    "user.id",
+    "owner.id",
+];
+const PATIENT_CPF_PATHS = [
+    "patientCpf",
+    "patient_cpf",
+    "patient.cpf",
+    "patient.document",
+    "patient.documentNumber",
+    "patient.taxId",
+    "patientInfo.cpf",
+    "patientDetails.cpf",
+    "paciente.cpf",
+    "user.cpf",
+    "owner.cpf",
+    "cpf",
+    "document",
+    "documentNumber",
+    "taxId",
+];
+
+function extractAppointmentArray(payload: unknown): GenericAppointmentRecord[] {
+    if (Array.isArray(payload)) {
+        return payload.filter((item): item is GenericAppointmentRecord => Boolean(item) && typeof item === "object");
+    }
+    if (payload && typeof payload === "object") {
+        const source = payload as Record<string, unknown>;
+        const candidates = [source.data, source.items, source.results, source.appointments, source.content];
+        for (const candidate of candidates) {
+            if (Array.isArray(candidate)) {
+                return candidate.filter(
+                    (item): item is GenericAppointmentRecord => Boolean(item) && typeof item === "object"
+                );
+            }
+        }
+    }
+    return [];
+}
+
+function normalizeDigits(value?: string | null) {
+    if (value == null) return "";
+    return String(value).replace(/\D/g, "");
+}
+
+function normalizeStatusToken(value?: string | null) {
+    if (!value || typeof value !== "string") return null;
+    return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\s-]+/g, "_")
+        .toUpperCase();
+}
+
+function isBlockingStatus(status?: string | null) {
+    const normalized = normalizeStatusToken(status);
+    if (!normalized) return false;
+    return ACTIVE_STATUS_TOKENS.has(normalized);
+}
+
+function getNestedValue(source: unknown, path: string): unknown {
+    if (!source || typeof source !== "object") return undefined;
+    const segments = path.split(".");
+    let current: unknown = source;
+    for (const segment of segments) {
+        if (current && typeof current === "object") {
+            current = (current as Record<string, unknown>)[segment];
+        } else {
+            return undefined;
+        }
+    }
+    return current;
+}
+
+function getFirstStringFromPaths(record: GenericAppointmentRecord, paths: string[]) {
+    for (const path of paths) {
+        const value = getNestedValue(record, path);
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return null;
+}
+
+function getValuesFromPaths(record: GenericAppointmentRecord, paths: string[]) {
+    const results: string[] = [];
+    for (const path of paths) {
+        const value = getNestedValue(record, path);
+        if ((typeof value === "string" || typeof value === "number") && `${value}`.trim()) {
+            results.push(`${value}`.trim());
+        }
+    }
+    return results;
+}
+
+function getDigitValuesFromPaths(record: GenericAppointmentRecord, paths: string[]) {
+    const raw = getValuesFromPaths(record, paths);
+    const normalized = raw
+        .map((value) => normalizeDigits(value))
+        .filter((value) => value.length > 0);
+    return Array.from(new Set(normalized));
+}
+
+function normalizeTimePortion(value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
+    if (!match) {
+        return trimmed;
+    }
+    const [, hour, minute = "00", second = "00"] = match;
+    return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:${second.padStart(2, "0")}`;
+}
+
+function tryParseDateTime(value: string) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseDateAndTime(datePart: string, timePart?: string | null) {
+    const trimmedDate = datePart?.trim();
+    if (!trimmedDate) return null;
+
+    if (timePart) {
+        const candidate =
+            tryParseDateTime(`${trimmedDate} ${timePart}`) ?? tryParseDateTime(`${trimmedDate}T${timePart}`);
+        if (candidate) {
+            return candidate;
+        }
+    }
+
+    const directDate = tryParseDateTime(trimmedDate);
+    if (directDate) {
+        return directDate;
+    }
+
+    const slashMatch = trimmedDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (!slashMatch) {
+        return null;
+    }
+
+    const [, day, month, year] = slashMatch;
+    const yyyy = year.length === 2 ? `20${year}` : year.padStart(4, "0");
+    const mm = month.padStart(2, "0");
+    const dd = day.padStart(2, "0");
+    const isoDate = `${yyyy}-${mm}-${dd}`;
+
+    if (timePart) {
+        const normalizedTime = normalizeTimePortion(timePart);
+        if (normalizedTime) {
+            const isoDateTime = tryParseDateTime(`${isoDate}T${normalizedTime}`);
+            if (isoDateTime) {
+                return isoDateTime;
+            }
+        }
+    }
+
+    return tryParseDateTime(`${isoDate}T00:00:00`);
+}
+
+function resolveAppointmentDateTime(record: GenericAppointmentRecord) {
+    const isoCandidate = getFirstStringFromPaths(record, ISO_DATETIME_PATHS);
+    if (isoCandidate) {
+        const parsed = tryParseDateTime(isoCandidate);
+        if (parsed) return parsed;
+    }
+
+    const datePart = getFirstStringFromPaths(record, DATE_PATHS);
+    if (!datePart) return null;
+    const timePart = getFirstStringFromPaths(record, TIME_PATHS);
+    const normalizedTime = normalizeTimePortion(timePart);
+    return parseDateAndTime(datePart, normalizedTime);
+}
+
+function gatherDoctorIdCandidates(record: GenericAppointmentRecord) {
+    return Array.from(new Set(getValuesFromPaths(record, DOCTOR_ID_PATHS)));
+}
+
+function gatherPatientIdCandidates(record: GenericAppointmentRecord) {
+    return Array.from(new Set(getValuesFromPaths(record, PATIENT_ID_PATHS)));
+}
+
+function gatherPatientCpfCandidates(record: GenericAppointmentRecord) {
+    return getDigitValuesFromPaths(record, PATIENT_CPF_PATHS);
+}
+
+function matchesDoctor(record: GenericAppointmentRecord, doctorId: string) {
+    const normalizedDoctorId = `${doctorId}`.trim();
+    const candidates = gatherDoctorIdCandidates(record);
+    if (candidates.length === 0) {
+        return true;
+    }
+    return candidates.some((value) => value === normalizedDoctorId);
+}
+
+function appointmentMatchesActor(
+    record: GenericAppointmentRecord,
+    patientId: string | null,
+    patientCpfDigits: string | null
+) {
+    if (patientId) {
+        const ids = gatherPatientIdCandidates(record);
+        if (ids.includes(patientId)) {
+            return true;
+        }
+    }
+
+    if (patientCpfDigits) {
+        const cpfs = gatherPatientCpfCandidates(record);
+        if (cpfs.includes(patientCpfDigits)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function findActiveDoctorAppointment(
+    records: GenericAppointmentRecord[],
+    doctorId: string,
+    patientId: string | null,
+    patientCpfDigits: string | null
+) {
+    const now = Date.now();
+    for (const record of records) {
+        if (!matchesDoctor(record, doctorId)) continue;
+        const statusValue = getFirstStringFromPaths(record, STATUS_PATHS);
+        if (!isBlockingStatus(statusValue)) continue;
+        if (!appointmentMatchesActor(record, patientId, patientCpfDigits)) continue;
+        const scheduledDate = resolveAppointmentDateTime(record);
+        if (!scheduledDate) continue;
+        if (scheduledDate.getTime() <= now) continue;
+        return record;
+    }
+    return null;
 }
 
 interface ClientPaymentProps {
@@ -137,6 +444,8 @@ export default function ClientPayment({
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [remoteDoctorConflict, setRemoteDoctorConflict] = useState(false);
+    const [isCheckingRemoteConflict, setIsCheckingRemoteConflict] = useState(false);
     const errorRef = useRef<HTMLDivElement | null>(null);
 
     const scheduledAt = useMemo(() => {
@@ -211,6 +520,102 @@ export default function ClientPayment({
         }
     }, [token]);
 
+    const actingPatientId = useMemo(
+        () => (forWhom === "other" ? null : patientIdFromToken),
+        [forWhom, patientIdFromToken]
+    );
+
+    const actingPatientCpf = useMemo(() => {
+        if (forWhom === "other") {
+            const cpfDigits = normalizedOtherPatient?.cpf ?? "";
+            return cpfDigits.length === 11 ? cpfDigits : null;
+        }
+        return normalizedPatientCpf.length === 11 ? normalizedPatientCpf : null;
+    }, [forWhom, normalizedOtherPatient, normalizedPatientCpf]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (!doctorId) {
+            setRemoteDoctorConflict(false);
+            setIsCheckingRemoteConflict(false);
+            return;
+        }
+        if (!token) {
+            setRemoteDoctorConflict(false);
+            setIsCheckingRemoteConflict(false);
+            return;
+        }
+        if (!actingPatientId && !actingPatientCpf) {
+            setRemoteDoctorConflict(false);
+            setIsCheckingRemoteConflict(false);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+        setIsCheckingRemoteConflict(true);
+
+        const verifyConflicts = async () => {
+            try {
+                const response = await fetch("/api/patients/appointments", {
+                    method: "GET",
+                    headers: {
+                        Accept: "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    cache: "no-store",
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const text = await response.text();
+                let payload: unknown = [];
+                if (text) {
+                    try {
+                        payload = JSON.parse(text);
+                    } catch {
+                        payload = [];
+                    }
+                }
+
+                const appointments = extractAppointmentArray(payload);
+                const conflict = findActiveDoctorAppointment(
+                    appointments,
+                    doctorId,
+                    actingPatientId,
+                    actingPatientCpf
+                );
+                if (cancelled) return;
+                setRemoteDoctorConflict(Boolean(conflict));
+                if (!conflict) {
+                    const stored = readActiveAppointments();
+                    const filtered = stored.filter((record) => record.doctorId !== doctorId);
+                    if (filtered.length !== stored.length) {
+                        writeActiveAppointments(filtered);
+                    }
+                }
+            } catch (error) {
+                if (cancelled) return;
+                console.warn("Falha ao verificar consultas ativas com este médico", error);
+                setRemoteDoctorConflict(false);
+            } finally {
+                if (!cancelled) {
+                    setIsCheckingRemoteConflict(false);
+                }
+            }
+        };
+
+        void verifyConflicts();
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [doctorId, token, actingPatientId, actingPatientCpf]);
+
     const primaryPatientReady = Boolean(
         patientIdFromToken &&
             normalizedPatientName.length > 0 &&
@@ -237,6 +642,13 @@ export default function ClientPayment({
 
         if (!scheduledAt) {
             setFormError("Não foi possível calcular o horário da consulta. Volte e selecione novamente.");
+            return;
+        }
+
+        if (remoteDoctorConflict) {
+            setFormError(
+                "Você já possui uma consulta ativa com este médico. Aguarde o atendimento ou cancele a consulta atual antes de agendar novamente."
+            );
             return;
         }
 

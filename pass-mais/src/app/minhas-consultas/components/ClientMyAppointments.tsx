@@ -5,58 +5,12 @@ import { clearTokens, jsonGet, jsonPost } from "@/lib/api";
 import { X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import RescheduleModal, { SlotDay } from "./RescheduleModal";
-
-type AppointmentStatus = "AGENDADA" | "REALIZADA" | "CANCELADA" | string;
-
-type Appointment = {
-    id: string;
-    date: string;
-    time: string;
-    doctorName: string;
-    patientName: string;
-    clinicAddress: string;
-    price: number;
-    status: AppointmentStatus;
-};
-
-type PatientAppointmentsApiItem = {
-    id?: string | null;
-    date?: string | null;
-    time?: string | null;
-    doctorName?: string | null;
-    patientName?: string | null;
-    clinicAddress?: string | null;
-    price?: number | string | null;
-    status?: string | null;
-};
-
-function extractAppointmentsPayload(payload: unknown): PatientAppointmentsApiItem[] {
-    if (Array.isArray(payload)) {
-        return payload;
-    }
-
-    if (payload && typeof payload === "object") {
-        const source = payload as Record<string, unknown>;
-        const candidates = [source.data, source.items, source.results, source.appointments, source.content];
-        for (const candidate of candidates) {
-            if (Array.isArray(candidate)) {
-                return candidate as PatientAppointmentsApiItem[];
-            }
-        }
-    }
-
-    return [];
-}
-
-function normalizeStatus(value?: string | null): AppointmentStatus {
-    if (!value) return "AGENDADA";
-    const upper = value.toUpperCase();
-    if (["AGENDADA", "AGENDADO", "SCHEDULED", "PENDING"].includes(upper)) return "AGENDADA";
-    if (["REALIZADA", "REALIZADO", "COMPLETED", "DONE"].includes(upper)) return "REALIZADA";
-    if (["CANCELADA", "CANCELADO", "CANCELED", "CANCELLED"].includes(upper)) return "CANCELADA";
-    return upper as AppointmentStatus;
-}
+import {
+    Appointment,
+    extractAppointmentsPayload,
+    normalizeAppointments,
+    AppointmentStatus,
+} from "../utils/appointments";
 
 const CLOCK_REFRESH_INTERVAL_MS = 60_000;
 
@@ -127,37 +81,12 @@ function isAppointmentPast(appointment: Appointment, reference: Date) {
 
 export default function ClientMyAppointments() {
     const [loadedAppointments, setLoadedAppointments] = useState<Appointment[] | null>(null);
-    const [rescheduleId, setRescheduleId] = useState<string | null>(null);
-    const [rescheduleSlots, setRescheduleSlots] = useState<SlotDay[] | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const [cancelingAppointmentId, setCancelingAppointmentId] = useState<string | null>(null);
     const [now, setNow] = useState<Date>(() => new Date());
-
-    const normalizeAppointments = (data: PatientAppointmentsApiItem[] | null | undefined): Appointment[] => {
-        if (!Array.isArray(data) || data.length === 0) return [];
-        return data.map((item, index) => {
-            const priceValue =
-                typeof item?.price === "number"
-                    ? item.price
-                    : typeof item?.price === "string"
-                        ? Number(item.price)
-                        : 0;
-            const status = normalizeStatus(item?.status);
-            return {
-                id: (item?.id && String(item.id)) || `appt-${index + 1}`,
-                date: item?.date ?? "—",
-                time: item?.time ?? "—",
-                doctorName: item?.doctorName ?? "—",
-                patientName: item?.patientName ?? "—",
-                clinicAddress: item?.clinicAddress ?? "—",
-                price: Number.isFinite(priceValue) ? priceValue : 0,
-                status,
-            };
-        });
-    };
 
     const loadAppointments = useCallback(async () => {
         setIsLoading(true);
@@ -198,26 +127,6 @@ export default function ClientMyAppointments() {
             style: "currency",
             currency: "BRL",
         }).format(value);
-    };
-
-    const formatDateBR = (d: Date) => {
-        const dd = String(d.getDate()).padStart(2, "0");
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const yyyy = d.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-    };
-
-    const defaultTimes = useMemo(() => ["09:00", "10:30", "14:00", "16:00"], []);
-
-    const computeSlots = (): SlotDay[] => {
-        // Simula agenda do médico: próximos 7 dias com horários padrão
-        const days: SlotDay[] = [];
-        for (let i = 1; i <= 7; i++) {
-            const d = new Date();
-            d.setDate(d.getDate() + i);
-            days.push({ date: formatDateBR(d), times: defaultTimes });
-        }
-        return days;
     };
 
     const { scheduledAppointments, pastAppointments, canceledAppointments } = useMemo(() => {
@@ -367,15 +276,12 @@ export default function ClientMyAppointments() {
                                         >
                                             {cancelingAppointmentId === appointment.id ? "Cancelando..." : "Cancelar consulta"}
                                         </button>
-                                        <button
-                                            onClick={() => {
-                                                setRescheduleId(appointment.id);
-                                                setRescheduleSlots(computeSlots());
-                                            }}
-                                            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+                                        <Link
+                                            href={`/reagendar-consulta/${appointment.id}`}
+                                            className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
                                         >
                                             Reagendar
-                                        </button>
+                                        </Link>
                                     </div>
                                 </div>
                             ))}
@@ -429,30 +335,6 @@ export default function ClientMyAppointments() {
                     )}
                 </div>
             </div>
-                    {rescheduleId && rescheduleSlots && loadedAppointments && (
-                        <RescheduleModal
-                            appointment={{
-                                id: rescheduleId,
-                                doctor: loadedAppointments.find((a) => a.id === rescheduleId)?.doctorName || "",
-                            }}
-                            slots={rescheduleSlots}
-                            onClose={() => {
-                                setRescheduleId(null);
-                                setRescheduleSlots(null);
-                    }}
-                    onConfirm={({ date, time }) => {
-                        setLoadedAppointments((prev) =>
-                            prev?.map((a) => (a.id === rescheduleId ? { ...a, date, time } : a)) || null
-                        );
-                        setRescheduleId(null);
-                        setRescheduleSlots(null);
-                        if (typeof window !== "undefined") {
-                            // Simples feedback nativo; podemos trocar por toast futuramente
-                            window.alert("Consulta reagendada com sucesso!");
-                        }
-                    }}
-                />
-            )}
         </div>
     );
 }
