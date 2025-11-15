@@ -1,4 +1,4 @@
-name: Testes Cypress
+name: Testes Cypress Pass
 
 on:
   push:
@@ -19,9 +19,11 @@ jobs:
           node-version: '18'
       
       - name: Instalar dependências
+        working-directory: ./testesCypressPass
         run: npm install
       
       - name: Executar testes Cypress
         uses: cypress-io/github-action@v6
         with:
+          working-directory: ./testesCypressPass
           browser: chrome
