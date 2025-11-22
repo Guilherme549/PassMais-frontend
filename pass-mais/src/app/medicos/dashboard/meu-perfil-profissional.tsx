@@ -1,64 +1,207 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
-
+import { useEffect, useState, type ChangeEvent } from "react";
 import { Input } from "@/components/ui/input";
+import { jsonGet, jsonPut } from "@/lib/api";
+import { extractDoctorIdFromToken } from "@/lib/token";
 
 type ProfessionalInfo = {
     fullName: string;
     crm: string;
-    specialties: string;
+    specialty: string;
     bio: string;
-    clinic_name: string;
-    clinic_street_number: string;
-    clinic_city: string;
-    clinic_postal_code: string;
-    consultation_price: string;
+    clinicName: string;
+    clinicStreetAndNumber: string;
+    clinicCity: string;
+    clinicPostalCode: string;
+    consultationPrice: string;
     phone: string;
+    photoUrl: string;
 };
 
-type EditableField = keyof ProfessionalInfo;
-
-const DEFAULT_PROFESSIONAL_INFO: ProfessionalInfo = {
-    fullName: "Dr. Carlos Mendes",
-    crm: "CRM-SP 123456",
-    specialties: "Cardiologia",
-    bio: "Especialista em cardiologia clínica e preventiva. Mais de 15 anos de experiência no tratamento de doenças cardiovasculares.",
-    clinic_name: "Clínica Vida Plena",
-    clinic_street_number: "Av. Paulista, 1000",
-    clinic_city: "São Paulo",
-    clinic_postal_code: "01310-100",
-    consultation_price: "R$ 250,00",
-    phone: "(11) 91234-5678",
+const EMPTY_PROFESSIONAL_INFO: ProfessionalInfo = {
+    fullName: "",
+    crm: "",
+    specialty: "",
+    bio: "",
+    clinicName: "",
+    clinicStreetAndNumber: "",
+    clinicCity: "",
+    clinicPostalCode: "",
+    consultationPrice: "",
+    phone: "",
+    photoUrl: "",
 };
+
+interface DoctorProfileResponse {
+    id?: string;
+    name?: string;
+    crm?: string;
+    specialty?: string;
+    bio?: string;
+    photoUrl?: string;
+    consultationPrice?: number;
+    clinicName?: string;
+    clinicStreetAndNumber?: string;
+    clinicCity?: string;
+    clinicPostalCode?: string;
+}
 
 export default function MeuPerfilProfissional() {
-    const [professionalInfo, setProfessionalInfo] = useState<ProfessionalInfo>(DEFAULT_PROFESSIONAL_INFO);
+    const [doctorId, setDoctorId] = useState<string | null>(null);
+    const [professionalInfo, setProfessionalInfo] = useState<ProfessionalInfo>(EMPTY_PROFESSIONAL_INFO);
+    const [isEditing, setIsEditing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const token = localStorage.getItem("accessToken");
+        setDoctorId(extractDoctorIdFromToken(token));
+    }, []);
+
+    useEffect(() => {
+        const loadDoctorProfile = async () => {
+            if (!doctorId) {
+                setIsLoading(false);
+                return;
+            }
+            setIsLoading(true);
+            setErrorMessage(null);
+            try {
+                const response = await jsonGet<DoctorProfileResponse>(`/api/doctors/${doctorId}`);
+                setProfessionalInfo((prev) => ({
+                    ...prev,
+                    fullName: response.name ?? prev.fullName,
+                    crm: response.crm ?? prev.crm,
+                    specialty: response.specialty ?? prev.specialty,
+                    bio: response.bio ?? prev.bio,
+                    photoUrl: response.photoUrl ?? prev.photoUrl,
+                    consultationPrice:
+                        typeof response.consultationPrice === "number" ? response.consultationPrice.toString() : prev.consultationPrice,
+                    clinicName: response.clinicName ?? prev.clinicName,
+                    clinicStreetAndNumber: response.clinicStreetAndNumber ?? prev.clinicStreetAndNumber,
+                    clinicCity: response.clinicCity ?? prev.clinicCity,
+                    clinicPostalCode: response.clinicPostalCode ?? prev.clinicPostalCode,
+                }));
+            } catch (error) {
+                const err = error as Error;
+                setErrorMessage(err.message || "Não foi possível carregar os dados do médico.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void loadDoctorProfile();
+    }, [doctorId]);
+
+    const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = event.target;
-        const field = name as EditableField;
-
-        setProfessionalInfo((prev) => ({
-            ...prev,
-            [field]: value,
-        }));
+        setProfessionalInfo((prev) => ({ ...prev, [name]: value }));
     };
+
+    const toggleEditing = () => {
+        setFeedbackMessage(null);
+        setErrorMessage(null);
+        setIsEditing((prev) => !prev);
+    };
+
+    const normalizePrice = (value: string) => {
+        const numeric = value.replace(/[^0-9,.-]/g, "").replace(",", ".");
+        const parsed = Number(numeric);
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const handleSave = async () => {
+        if (!doctorId) {
+            setErrorMessage("Não foi possível identificar o médico autenticado. Faça login novamente.");
+            return;
+        }
+        setIsSaving(true);
+        setErrorMessage(null);
+        setFeedbackMessage(null);
+
+        try {
+            const payload = {
+                id: doctorId,
+                crm: professionalInfo.crm,
+                specialty: professionalInfo.specialty,
+                bio: professionalInfo.bio,
+                photoUrl: professionalInfo.photoUrl || null,
+                consultationPrice: normalizePrice(professionalInfo.consultationPrice),
+                clinicName: professionalInfo.clinicName,
+                clinicStreetAndNumber: professionalInfo.clinicStreetAndNumber,
+                clinicCity: professionalInfo.clinicCity,
+                clinicPostalCode: professionalInfo.clinicPostalCode,
+            };
+            await jsonPut(`/api/doctors/${doctorId}`, payload);
+            setFeedbackMessage("Perfil atualizado com sucesso.");
+            setIsEditing(false);
+        } catch (error) {
+            const err = error as Error;
+            setErrorMessage(err.message || "Não foi possível atualizar o perfil. Tente novamente.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const inputBaseClass =
+        "h-11 rounded-2xl border border-gray-200 px-4 text-sm text-gray-700 focus:border-[#5179EF] focus:outline-none focus:ring-2 focus:ring-[#5179EF]/20 disabled:bg-gray-50 disabled:text-gray-500";
+    const textareaBaseClass =
+        "min-h-[140px] w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-700 focus:border-[#5179EF] focus:outline-none focus:ring-2 focus:ring-[#5179EF]/20 disabled:bg-gray-50 disabled:text-gray-500";
 
     return (
         <section className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
                 <div>
-                    <h1 className="text-3xl font-semibold text-gray-900">Editar Perfil</h1>
-                    <p className="text-sm text-gray-500">Mantenha suas informações profissionais atualizadas</p>
+                    <h1 className="text-3xl font-semibold text-gray-900">Meu Perfil Profissional</h1>
+                    <p className="text-sm text-gray-500">
+                        Os dados são carregados do seu cadastro oficial e permanecem bloqueados até você optar por editar.
+                    </p>
                 </div>
-                <button
-                    type="button"
-                    className="self-end rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 md:self-auto"
-                >
-                    Editar Perfil
-                </button>
+                <div className="flex gap-3">
+                    {isEditing && (
+                        <button
+                            type="button"
+                            onClick={() => setIsEditing(false)}
+                            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                        >
+                            Cancelar
+                        </button>
+                    )}
+                    {isEditing && (
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="rounded-full bg-[#5179EF] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#395fd3] disabled:cursor-not-allowed disabled:bg-[#a8b7f0]"
+                        >
+                            {isSaving ? "Salvando..." : "Salvar"}
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={toggleEditing}
+                        disabled={isLoading}
+                        className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-600"
+                    >
+                        {isEditing ? "Bloquear edição" : "Editar Perfil"}
+                    </button>
+                </div>
             </div>
+
+            {feedbackMessage && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {feedbackMessage}
+                </div>
+            )}
+            {errorMessage && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {errorMessage}
+                </div>
+            )}
 
             <div className="rounded-3xl border border-gray-200 bg-white shadow-md">
                 <div className="border-b border-gray-200 px-8 py-6">
@@ -74,157 +217,193 @@ export default function MeuPerfilProfissional() {
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
                             >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M12 14a5 5 0 100-10 5 5 0 000 10z"
-                                />
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M4.5 20.5a8.5 8.5 0 0115 0"
-                                />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14a5 5 0 100-10 5 5 0 000 10z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 20.5a8.5 8.5 0 0115 0" />
                             </svg>
                         </div>
                         <div className="text-center sm:text-left">
                             <h3 className="text-base font-semibold text-gray-900">Foto</h3>
-                            <p className="text-sm text-gray-500">Foto do perfil profissional</p>
+                            <p className="text-sm text-gray-500">Foto do perfil profissional (atualize via URL ou upload em breve).</p>
                         </div>
                     </div>
 
-                    <div className="grid gap-6">
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Nome</span>
-                                <div className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                                    {professionalInfo.fullName}
+                    {isLoading ? (
+                        <p className="text-sm text-gray-500">Carregando dados do perfil...</p>
+                    ) : (
+                        <div className="grid gap-6">
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Nome</span>
+                                    <div className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                                        {professionalInfo.fullName || "—"}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="crm">
+                                        CRM
+                                    </label>
+                                    <Input
+                                        id="crm"
+                                        name="crm"
+                                        value={professionalInfo.crm}
+                                        onChange={handleInputChange}
+                                        placeholder="CRM"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
                                 </div>
                             </div>
+
                             <div className="space-y-2">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">CRM</span>
-                                <div className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                                    {professionalInfo.crm}
+                                <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="specialty">
+                                    Especialidade
+                                </label>
+                                <Input
+                                    id="specialty"
+                                    name="specialty"
+                                    value={professionalInfo.specialty}
+                                    onChange={handleInputChange}
+                                    placeholder="Ex: Cardiologia"
+                                    disabled={!isEditing}
+                                    className={inputBaseClass}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="bio">
+                                    Descrição
+                                </label>
+                                <textarea
+                                    id="bio"
+                                    name="bio"
+                                    value={professionalInfo.bio}
+                                    onChange={handleInputChange}
+                                    placeholder="Compartilhe sua experiência clínica..."
+                                    disabled={!isEditing}
+                                    className={textareaBaseClass}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="photoUrl">
+                                    URL da foto
+                                </label>
+                                <Input
+                                    id="photoUrl"
+                                    name="photoUrl"
+                                    value={professionalInfo.photoUrl}
+                                    onChange={handleInputChange}
+                                    placeholder="https://..."
+                                    disabled={!isEditing}
+                                    className={inputBaseClass}
+                                />
+                            </div>
+
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="clinicName">
+                                        Nome da clínica
+                                    </label>
+                                    <Input
+                                        id="clinicName"
+                                        name="clinicName"
+                                        value={professionalInfo.clinicName}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: Clínica Vida Plena"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label
+                                        className="text-xs font-semibold uppercase tracking-wide text-gray-400"
+                                        htmlFor="clinicStreetAndNumber"
+                                    >
+                                        Endereço
+                                    </label>
+                                    <Input
+                                        id="clinicStreetAndNumber"
+                                        name="clinicStreetAndNumber"
+                                        value={professionalInfo.clinicStreetAndNumber}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: Av. Paulista, 1000"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-400" htmlFor="clinicCity">
+                                        Cidade
+                                    </label>
+                                    <Input
+                                        id="clinicCity"
+                                        name="clinicCity"
+                                        value={professionalInfo.clinicCity}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: São Paulo"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label
+                                        className="text-xs font-semibold uppercase tracking-wide text-gray-400"
+                                        htmlFor="clinicPostalCode"
+                                    >
+                                        CEP
+                                    </label>
+                                    <Input
+                                        id="clinicPostalCode"
+                                        name="clinicPostalCode"
+                                        value={professionalInfo.clinicPostalCode}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: 01310-100"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <label
+                                        className="text-xs font-semibold uppercase tracking-wide text-gray-400"
+                                        htmlFor="consultationPrice"
+                                    >
+                                        Valor da consulta (R$)
+                                    </label>
+                                    <Input
+                                        id="consultationPrice"
+                                        name="consultationPrice"
+                                        value={professionalInfo.consultationPrice}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: 250"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                        Telefone (interno)
+                                    </label>
+                                    <Input
+                                        id="phone"
+                                        name="phone"
+                                        value={professionalInfo.phone}
+                                        onChange={handleInputChange}
+                                        placeholder="Ex: (11) 91234-5678"
+                                        disabled={!isEditing}
+                                        className={inputBaseClass}
+                                    />
                                 </div>
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Especialidades</span>
-                            <div className="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                                {professionalInfo.specialties}
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Descrição</span>
-                            <div className="rounded-2xl bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-700">
-                                {professionalInfo.bio}
-                            </div>
-                        </div>
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <label
-                                    htmlFor="clinic_name"
-                                    className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                                >
-                                    Nome da clínica onde está atendendo
-                                </label>
-                                <Input
-                                    id="clinic_name"
-                                    name="clinic_name"
-                                    value={professionalInfo.clinic_name}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: Clínica Vida Plena"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label
-                                    htmlFor="clinic_street_number"
-                                    className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                                >
-                                    Endereço onde está atendendo
-                                </label>
-                                <Input
-                                    id="clinic_street_number"
-                                    name="clinic_street_number"
-                                    value={professionalInfo.clinic_street_number}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: Av. Paulista, 1000"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                        </div>
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <label
-                                    htmlFor="clinic_city"
-                                    className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                                >
-                                    Cidade da clínica
-                                </label>
-                                <Input
-                                    id="clinic_city"
-                                    name="clinic_city"
-                                    value={professionalInfo.clinic_city}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: São Paulo"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label
-                                    htmlFor="clinic_postal_code"
-                                    className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                                >
-                                    CEP
-                                </label>
-                                <Input
-                                    id="clinic_postal_code"
-                                    name="clinic_postal_code"
-                                    value={professionalInfo.clinic_postal_code}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: 01310-100"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                        </div>
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <label
-                                    htmlFor="consultation_price"
-                                    className="text-xs font-semibold uppercase tracking-wide text-gray-400"
-                                >
-                                    Valor da consulta
-                                </label>
-                                <Input
-                                    id="consultation_price"
-                                    name="consultation_price"
-                                    value={professionalInfo.consultation_price}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: R$ 250,00"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                    Telefone de contato
-                                </label>
-                                <Input
-                                    id="phone"
-                                    name="phone"
-                                    type="tel"
-                                    value={professionalInfo.phone}
-                                    onChange={handleInputChange}
-                                    placeholder="Ex: (11) 91234-5678"
-                                    className="h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700"
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
-
         </section>
     );
 }
