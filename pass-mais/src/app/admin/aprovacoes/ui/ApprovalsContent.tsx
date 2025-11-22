@@ -193,7 +193,6 @@ export default function ApprovalsContent() {
 
   const totalPendentes = data.length;
   const medicosPendentes = data.length;
-  const pacientesPendentes = 0; // Endpoint atual retorna somente médicos
 
   return (
     <div className="space-y-6">
@@ -213,7 +212,6 @@ export default function ApprovalsContent() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <CardResumo title="Total Pendentes" value={totalPendentes} subtitle="Aguardando aprovação" />
           <CardResumo title="Médicos Pendentes" value={medicosPendentes} subtitle="Cadastros médicos" />
-          <CardResumo title="Pacientes Pendentes" value={pacientesPendentes} subtitle="Cadastros de pacientes" />
         </div>
       </section>
 
