@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const CORPORATE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITE_PATH = "/secretarias/convite";
 
 type Banner = {
     id: number;
@@ -55,6 +56,18 @@ function formatDate(value: string) {
     } catch {
         return value;
     }
+}
+
+function resolveInviteBaseUrl() {
+    const envUrl = (process.env.NEXTAUTH_URL || "").trim();
+    if (envUrl) {
+        const sanitizedEnvUrl = envUrl.replace(/\/$/, "");
+        return sanitizedEnvUrl.startsWith("http") ? sanitizedEnvUrl : `https://${sanitizedEnvUrl}`;
+    }
+    if (typeof window !== "undefined" && window.location?.origin) {
+        return window.location.origin.replace(/\/$/, "");
+    }
+    return "";
 }
 
 function formatStatusBadge(status: JoinCode["status"]) {
@@ -281,16 +294,41 @@ type InviteSuccessModalProps = {
 
 function InviteSuccessModal({ open, code, secretaryName, secretaryEmail, expiresAt, onClose }: InviteSuccessModalProps) {
     const [copied, setCopied] = useState(false);
+    const [copiedTemplate, setCopiedTemplate] = useState(false);
+    const inviteBaseUrl = useMemo(resolveInviteBaseUrl, []);
+    const inviteLink = useMemo(() => {
+        if (!inviteBaseUrl) return INVITE_PATH;
+        const sanitized = inviteBaseUrl.replace(/\/$/, "");
+        return `${sanitized}${INVITE_PATH}`;
+    }, [inviteBaseUrl]);
+    const inviteMessage = useMemo(() => {
+        const name = secretaryName?.trim() || "secretária";
+        const email = secretaryEmail?.trim() || "e-mail não informado";
+        return (
+            `Olá, ${name}!\n` +
+            "Você foi convidada para acessar o painel de secretariado do sistema Pass+.\n\n" +
+            "Para concluir o seu cadastro, utilize as informações abaixo:\n\n" +
+            "📧 E-mail cadastrado:\n" +
+            `${email}\n\n` +
+            "🔑 Código de Convite:\n" +
+            `${code}\n\n` +
+            "📌 Link para cadastro:\n" +
+            `${inviteLink}\n\n` +
+            "Após acessar o link, insira o código e finalize o seu cadastro.\n\n" +
+            "Qualquer dúvida, estou à disposição!"
+        );
+    }, [code, inviteLink, secretaryEmail, secretaryName]);
 
     useEffect(() => {
         if (!open) {
             setCopied(false);
+            setCopiedTemplate(false);
         }
     }, [open]);
 
     if (!open) return null;
 
-    const handleCopy = async () => {
+    const handleCopyCode = async () => {
         try {
             if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(code);
@@ -304,9 +342,27 @@ function InviteSuccessModal({ open, code, secretaryName, secretaryEmail, expires
         }
     };
 
+    const handleCopyTemplate = async () => {
+        try {
+            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(inviteMessage);
+            } else {
+                throw new Error("Clipboard API indisponível");
+            }
+            setCopiedTemplate(true);
+            setTimeout(() => setCopiedTemplate(false), 2000);
+        } catch {
+            setCopiedTemplate(false);
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true">
-            <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div className="w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8" style={{ maxHeight: "90vh" }}>
                 <div className="flex items-center gap-3 text-emerald-600">
                     <CheckCircle2 className="h-6 w-6" />
                     <h2 className="text-lg font-semibold text-gray-900">Código gerado com sucesso!</h2>
@@ -316,19 +372,45 @@ function InviteSuccessModal({ open, code, secretaryName, secretaryEmail, expires
                 </p>
 
                 <div className="mt-6 space-y-4">
-                    <div className="flex items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                        <div>
+                    <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 break-words">
                             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Código</p>
                             <p className="mt-1 text-xl font-semibold text-gray-900">{code}</p>
                         </div>
                         <button
                             type="button"
-                            onClick={handleCopy}
-                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900"
+                            onClick={handleCopyCode}
+                            className="inline-flex w-full items-center justify-center gap-2 self-start rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900 sm:w-auto sm:self-auto"
                         >
                             {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                             {copied ? "Copiado!" : "Copiar código"}
                         </button>
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 break-words">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mensagem pronta para envio</p>
+                                <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-700 sm:leading-relaxed">
+                                    {inviteMessage}
+                                </p>
+                                <p className="mt-3 text-xs text-gray-500">
+                                    Inclui o código gerado e o link de cadastro da secretária.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCopyTemplate}
+                                className="inline-flex w-full items-center justify-center gap-2 self-start rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900 sm:w-auto sm:self-auto"
+                            >
+                                {copiedTemplate ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                                {copiedTemplate ? "Copiado!" : "Copiar mensagem"}
+                            </button>
+                        </div>
+                        <div className="mt-3 break-words rounded-2xl bg-white px-3 py-2 text-xs text-gray-600">
+                            <span className="font-semibold text-gray-800">Link de cadastro: </span>
+                            <span className="break-all">{inviteLink}</span>
+                        </div>
                     </div>
 
                     <div className="space-y-2 rounded-2xl border border-gray-100 bg-white p-4">
