@@ -1,4 +1,3 @@
-import { Roboto } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
 
@@ -18,17 +17,10 @@ export const metadata: Metadata = {
   // themeColor: "#0B5FFF", // opcional
 };
 
-const roboto = Roboto({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-roboto",
-  display: "swap",
-});
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body suppressHydrationWarning className={`${roboto.className} ${roboto.variable} bg-gray-100`}>
+      <body suppressHydrationWarning className="bg-gray-100">
         {children}
       </body>
     </html>
