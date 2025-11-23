@@ -468,7 +468,7 @@ export default function SecretaryDashboardPage() {
                 return;
             }
 
-            setTokens({ accessToken: storedToken });
+            setTokens({ accessToken: storedToken }, { role: storedRole || tokenRole }, { resetSession: false });
             void refetchDoctors();
         } catch {
             clearTokens();

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { clearTokens } from "@/lib/api";
 import {
     Bell,
     CalendarCheck,
@@ -126,12 +127,20 @@ export default function MedicoDashboardSection() {
     const pathname = usePathname();
     const [activeSection, setActiveSection] = useState("visao-geral");
 
-    // Bloqueia acesso sem accessToken
+    // Bloqueia acesso sem accessToken ou sem role de médico
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            router.push('/medicos/login-medico');
+        if (typeof window === "undefined") return;
+        const token = localStorage.getItem("accessToken");
+        const role = (localStorage.getItem("role") || "").toUpperCase();
+        const isDoctor = role === "DOCTOR";
+        if (!token || !isDoctor) {
+            clearTokens();
+            try {
+                localStorage.removeItem("doctorId");
+            } catch {
+                // ignore
+            }
+            router.replace("/medicos/login-medico");
         }
     }, [router]);
 

@@ -87,8 +87,6 @@ export default function LoginMedico() {
         throw new Error("Token de acesso ausente na resposta da API.");
       }
 
-      setTokens({ accessToken, refreshToken });
-
       const explicitDoctorId =
         data.doctorId ||
         data.user?.doctorId ||
@@ -107,6 +105,7 @@ export default function LoginMedico() {
       }
 
       const role = (data.role || data.user?.role || (Array.isArray(data.roles) ? data.roles[0] : undefined))?.toLowerCase();
+      setTokens({ accessToken, refreshToken }, { userId: doctorId || explicitDoctorId, role });
       if (role) localStorage.setItem("role", role);
       console.log("Role detectada:", role);
 

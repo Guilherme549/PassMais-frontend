@@ -109,7 +109,7 @@ export default function LoginForm() {
       }
 
       // Armazena somente o accessToken (refresh via /api/auth/refresh)
-      setTokens({ accessToken });
+      setTokens({ accessToken }, { role });
       if (role) {
         localStorage.setItem('role', role);
         // Disponibiliza a role para páginas server-side via cookie
