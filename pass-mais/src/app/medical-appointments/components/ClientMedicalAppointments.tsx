@@ -32,6 +32,9 @@ const joinAddressParts = (...parts: Array<string | null | undefined>) =>
 
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
 function normalizeForSearch(value: string | null | undefined) {
   if (!value) return "";
   return value
@@ -193,6 +196,14 @@ function DoctorCard({ doctor, onCardClick }: DoctorCardProps) {
                 </div>
               </div>
             )}
+            <div className="pt-2">
+              <span className="text-lg font-semibold text-gray-900 block">Valor da consulta:</span>
+              <p className="text-lg text-gray-700">
+                {typeof doctor.consultationPrice === "number"
+                  ? formatCurrency(doctor.consultationPrice)
+                  : "Valor não informado"}
+              </p>
+            </div>
           </div>
         </div>
         <div className="flex items-end mt-6 sm:mt-0">

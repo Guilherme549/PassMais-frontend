@@ -11,7 +11,7 @@ export function buildDoctorProfile(base: DoctorSummary): DoctorProfile {
         ...base,
         bio: base.bio || "Biografia não informada.",
         address: base.address ?? "Endereço não informado.",
-        consultationFee: deriveConsultationFee(base.id),
+        consultationFee: typeof base.consultationPrice === "number" ? base.consultationPrice : null,
     };
 }
 
@@ -95,11 +95,4 @@ export function applyFallbackDoctor(
         loadSchedule(fallback.id, true);
     }
     return true;
-}
-
-function deriveConsultationFee(id: string): number {
-    const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const baseFee = 200;
-    const variation = (hash % 6) * 20;
-    return baseFee + variation;
 }

@@ -62,6 +62,9 @@ const joinAddressParts = (...parts: Array<string | null | undefined>) =>
         .filter((value) => value.length > 0)
         .join(", ");
 
+const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
 const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function getFormatter(timeZone: string, options: Intl.DateTimeFormatOptions) {
@@ -672,6 +675,12 @@ export default function DoctorModal({ doctor, onClose, onSlotSelect }: DoctorMod
                         <div className="space-y-2">
                             <h2 className="text-2xl font-bold text-gray-900">{doctor.name}</h2>
                             <p className="text-lg text-gray-600">{doctor.specialty} • CRM {doctor.crm}</p>
+                            <p className="text-gray-700 font-semibold">
+                                Valor da consulta:{" "}
+                                {typeof doctor.consultationPrice === "number"
+                                    ? formatCurrency(doctor.consultationPrice)
+                                    : "Valor não informado"}
+                            </p>
                         </div>
                     </div>
 

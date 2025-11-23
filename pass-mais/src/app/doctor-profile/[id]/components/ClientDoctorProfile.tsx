@@ -150,6 +150,11 @@ export default function ClientDoctorProfile({
     initialTime = null,
 }: ClientDoctorProfileProps) {
     const router = useRouter();
+    const consultationValue = useMemo(() => {
+        if (typeof doctor.consultationPrice === "number") return doctor.consultationPrice;
+        if (typeof doctor.consultationFee === "number") return doctor.consultationFee;
+        return null;
+    }, [doctor]);
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [forWhom, setForWhom] = useState<string>("self");
@@ -547,8 +552,8 @@ export default function ClientDoctorProfile({
         if (locationLabel.length > 0) {
             params.set("location", locationLabel);
         }
-        if (typeof doctor.consultationFee === "number") {
-            params.set("consultationValue", String(doctor.consultationFee));
+        if (typeof consultationValue === "number") {
+            params.set("consultationValue", String(consultationValue));
         }
         if (primaryPhoneDigits.length >= 10) {
             params.set("phone", primaryPhoneDigits);
@@ -637,7 +642,10 @@ export default function ClientDoctorProfile({
                         )}
                         <p className="text-gray-600 mb-4">{doctor.bio || "Biografia não informada."}</p>
                         <p className="text-gray-600 font-semibold">
-                            Valor da consulta: {formatCurrency(doctor.consultationFee ?? 0)}
+                            Valor da consulta:{" "}
+                            {typeof consultationValue === "number"
+                                ? formatCurrency(consultationValue)
+                                : "Valor não informado"}
                         </p>
                     </div>
 
