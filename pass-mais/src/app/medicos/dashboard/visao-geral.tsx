@@ -1392,9 +1392,14 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                     return;
                 }
                 setPatientFile(null);
-                setPatientFileError(
-                    error instanceof Error ? error.message : "Não foi possível carregar os dados do paciente.",
-                );
+                const status = (error as { status?: number } | null)?.status;
+                if (status === 404) {
+                    setPatientFileError("Este paciente ainda não possui ficha cadastrada no sistema.");
+                } else {
+                    setPatientFileError(
+                        error instanceof Error ? error.message : "Não foi possível carregar os dados do paciente.",
+                    );
+                }
             } finally {
                 if (!cancelled) {
                     setIsPatientFileLoading(false);
@@ -1811,7 +1816,7 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                             <X className="h-5 w-5" />
                         </button>
 
-                        <header className="sticky top-4 z-30 mb-6 rounded-3xl border border-gray-100 bg-white/95 p-6 shadow-lg shadow-black/5 backdrop-blur">
+                        <header className="mb-6 rounded-3xl border border-gray-100 bg-white p-6 shadow-lg shadow-black/5">
                             <div className="flex flex-col gap-6">
                                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="flex items-start gap-4">
