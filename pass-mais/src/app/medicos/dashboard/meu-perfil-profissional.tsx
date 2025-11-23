@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent } from "react";
+import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { jsonGet, jsonPut } from "@/lib/api";
 import { extractDoctorIdFromToken } from "@/lib/token";
+import { normalizeImageUrl } from "@/lib/utils";
 
 type ProfessionalInfo = {
     fullName: string;
@@ -151,6 +153,8 @@ export default function MeuPerfilProfissional() {
         "h-11 rounded-2xl border border-gray-200 px-4 text-sm text-gray-700 focus:border-[#5179EF] focus:outline-none focus:ring-2 focus:ring-[#5179EF]/20 disabled:bg-gray-50 disabled:text-gray-500";
     const textareaBaseClass =
         "min-h-[140px] w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-700 focus:border-[#5179EF] focus:outline-none focus:ring-2 focus:ring-[#5179EF]/20 disabled:bg-gray-50 disabled:text-gray-500";
+    const photoSrc =
+        normalizeImageUrl(professionalInfo.photoUrl)?.toString() || "/avatar-placeholer.jpeg";
 
     return (
         <section className="space-y-8">
@@ -209,17 +213,15 @@ export default function MeuPerfilProfissional() {
                 </div>
                 <div className="space-y-8 px-8 py-8">
                     <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-                        <div className="flex h-28 w-28 items-center justify-center rounded-full border border-dashed border-gray-300 bg-gray-50">
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-12 w-12 text-gray-400"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14a5 5 0 100-10 5 5 0 000 10z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 20.5a8.5 8.5 0 0115 0" />
-                            </svg>
+                        <div className="relative h-28 w-28 overflow-hidden rounded-full border border-gray-200 bg-gray-50">
+                            <Image
+                                src={photoSrc}
+                                alt="Foto do médico"
+                                fill
+                                sizes="112px"
+                                className="object-cover"
+                                priority
+                            />
                         </div>
                         <div className="text-center sm:text-left">
                             <h3 className="text-base font-semibold text-gray-900">Foto</h3>
