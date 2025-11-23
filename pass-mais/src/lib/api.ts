@@ -95,22 +95,22 @@ export async function apiFetch(path: string, init: ApiFetchInit = {}): Promise<R
   return res;
 }
 
+function buildResponseError(res: Response, raw: string): Error & { status?: number } {
+  const error = new Error(raw || `HTTP ${res.status}`) as Error & { status?: number };
+  error.status = res.status;
+  return error;
+}
+
 export async function jsonPost<T>(path: string, body: any, init: ApiFetchInit = {}): Promise<T> {
   const res = await apiFetch(path, { method: "POST", body: JSON.stringify(body), ...init });
   const text = await res.text();
   if (!res.ok) {
-    const buildError = (message: string) => {
-      const error = new Error(message) as Error & { status?: number };
-      error.status = res.status;
-      return error;
-    };
-
     try {
       const data = JSON.parse(text);
       const message = data.message || data.mensagem || data.error || `HTTP ${res.status}`;
-      throw buildError(message);
+      throw buildResponseError(res, message);
     } catch {
-      throw buildError(text || `HTTP ${res.status}`);
+      throw buildResponseError(res, text);
     }
   }
   return text ? JSON.parse(text) : ({} as T);
@@ -120,18 +120,12 @@ export async function jsonPut<T>(path: string, body: any, init: ApiFetchInit = {
   const res = await apiFetch(path, { method: "PUT", body: JSON.stringify(body), ...init });
   const text = await res.text();
   if (!res.ok) {
-    const buildError = (message: string) => {
-      const error = new Error(message) as Error & { status?: number };
-      error.status = res.status;
-      return error;
-    };
-
     try {
       const data = JSON.parse(text);
       const message = data.message || data.mensagem || data.error || `HTTP ${res.status}`;
-      throw buildError(message);
+      throw buildResponseError(res, message);
     } catch {
-      throw buildError(text || `HTTP ${res.status}`);
+      throw buildResponseError(res, text);
     }
   }
   return text ? JSON.parse(text) : ({} as T);
@@ -141,18 +135,12 @@ export async function jsonGet<T>(path: string, init: ApiFetchInit = {}): Promise
   const res = await apiFetch(path, { method: "GET", ...init });
   const text = await res.text();
   if (!res.ok) {
-    const buildError = (message: string) => {
-      const error = new Error(message) as Error & { status?: number };
-      error.status = res.status;
-      return error;
-    };
-
     try {
       const data = JSON.parse(text);
       const message = data.message || data.mensagem || data.error || `HTTP ${res.status}`;
-      throw buildError(message);
+      throw buildResponseError(res, message);
     } catch {
-      throw buildError(text || `HTTP ${res.status}`);
+      throw buildResponseError(res, text);
     }
   }
   return text ? JSON.parse(text) : ({} as T);
