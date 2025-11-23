@@ -21,7 +21,7 @@ import {
     type LucideIcon,
 } from "lucide-react";
 import { jsonGet } from "@/lib/api";
-import { extractDoctorIdFromToken } from "@/lib/token";
+import { decodeAccessTokenPayload, extractDoctorIdFromToken } from "@/lib/token";
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 const PAGE_SIZE = 20;
@@ -763,6 +763,7 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
     const [activeTab, setActiveTab] = useState<ConsultationTabKey>("resumo");
     const [preferredInitialTab, setPreferredInitialTab] = useState<ConsultationTabKey | null>(null);
     const [doctorId, setDoctorId] = useState<string | null>(null);
+    const [isDoctorApproved, setIsDoctorApproved] = useState<boolean | null>(null);
     const [isFetchingAppointments, setIsFetchingAppointments] = useState(isLoading);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [patientFile, setPatientFile] = useState<PatientFileResponse | null>(null);
@@ -861,12 +862,16 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
         if (typeof window === "undefined") {
             return;
         }
+        const accessToken = window.localStorage.getItem("accessToken");
+        const payload = decodeAccessTokenPayload(accessToken);
+        if (payload && typeof payload.approved === "boolean") {
+            setIsDoctorApproved(payload.approved);
+        }
         const storedDoctorId = window.localStorage.getItem("doctorId");
         if (storedDoctorId) {
             setDoctorId(storedDoctorId);
             return;
         }
-        const accessToken = window.localStorage.getItem("accessToken");
         const derivedDoctorId = extractDoctorIdFromToken(accessToken);
         if (derivedDoctorId) {
             window.localStorage.setItem("doctorId", derivedDoctorId);
@@ -1450,6 +1455,19 @@ export default function VisaoGeral({ appointments, isLoading = false }: VisaoGer
                     Visualize suas consultas por período, acompanhe alertas clínicos e acesse os detalhes do paciente com segurança.
                 </p>
             </header>
+
+            {isDoctorApproved === false && (
+                <div className="flex items-start gap-3 rounded-3xl border border-amber-300 bg-amber-50/80 px-5 py-4 text-sm text-amber-900 shadow-sm">
+                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden="true" />
+                    <div className="space-y-1">
+                        <p className="text-base font-bold leading-tight">Seu cadastro ainda está em análise.</p>
+                        <p className="leading-relaxed">
+                            Para que seu perfil seja exibido aos pacientes e você possa usar o sistema de forma completa,
+                            aguarde a aprovação de um administrador.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {fetchError && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
