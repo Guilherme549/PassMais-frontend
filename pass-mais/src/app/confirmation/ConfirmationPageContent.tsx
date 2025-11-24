@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Doctor } from "@/app/medical-appointments/types";
 import { fallbackDoctors } from "@/app/medical-appointments/fallbackDoctors";
-import { normalizeImageUrl } from "@/lib/utils";
+import { normalizeDoctors } from "@/app/doctor-profile/utils";
 
 export default function ConfirmationPageContent() {
     const router = useRouter();
@@ -217,4 +217,44 @@ function formatPaymentMethod(value: string | null): string {
     if (value === "pix") return "PIX";
     if (value === "card") return "Cartão";
     return value;
+}
+
+function formatCpf(value: string): string {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length !== 11) return value;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatBirthDate(value: string): string {
+    const parts = value.split("-");
+    if (parts.length === 3) {
+        const [year, month, day] = parts;
+        if (year && month && day) return `${day}/${month}/${year}`;
+    }
+    return value;
+}
+
+function formatPhone(value: string): string {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length < 10) return value;
+    if (digits.length === 10) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function buildAddressFallback(doctor: Doctor | null): string {
+    if (!doctor) return "Endereço não informado";
+    const parts = [
+        doctor.clinicStreetAndNumber,
+        doctor.clinicCity,
+        doctor.clinicState,
+        doctor.clinicPostalCode,
+    ].filter((value) => typeof value === "string" && value.trim().length > 0) as string[];
+    const address = parts.join(", ");
+    if (address.length > 0 && doctor.clinicName) {
+        return `${doctor.clinicName} - ${address}`;
+    }
+    if (address.length > 0) return address;
+    return doctor.clinicName ?? doctor.address ?? "Endereço não informado";
 }
