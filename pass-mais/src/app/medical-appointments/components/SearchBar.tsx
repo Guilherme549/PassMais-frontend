@@ -268,8 +268,6 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
             setCityOpen(true);
             setIsOpen(false);
             setHighlightedIndex(null);
-            setInsuranceOpen(false);
-            setInsuranceHighlightedIndex(null);
             return;
         }
 
@@ -305,8 +303,6 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         setCityOpen(true);
         setIsOpen(false);
         setHighlightedIndex(null);
-        setInsuranceOpen(false);
-        setInsuranceHighlightedIndex(null);
         if (cityQuery.trim().length === 0) {
             setCityVisibleCount(DEFAULT_CITY_VISIBLE);
         }
@@ -339,12 +335,6 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
         }
     }, [cityQuery, selectedCity, selectedState]);
 
-    const handleInsuranceSelect = (value: string) => {
-        setInsuranceQuery(value);
-        setInsuranceOpen(false);
-        setInsuranceHighlightedIndex(null);
-    };
-
     return (
         <div className="flex w-full px-1">
             <form
@@ -370,15 +360,11 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                                 setIsOpen(true);
                                 setCityOpen(false);
                                 setCityHighlightedIndex(null);
-                                setInsuranceOpen(false);
-                                setInsuranceHighlightedIndex(null);
                             }}
                             onFocus={() => {
                                 setIsOpen(true);
                                 setCityOpen(false);
                                 setCityHighlightedIndex(null);
-                                setInsuranceOpen(false);
-                                setInsuranceHighlightedIndex(null);
                             }}
                             onKeyDown={handleKeyDown}
                             className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-5 pr-10 text-base text-gray-600 shadow-sm outline-none transition focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 md:text-lg"
@@ -390,8 +376,6 @@ export default function SearchBar({ onSubmit }: SearchBarProps) {
                                 setIsOpen(true);
                                 setCityOpen(false);
                                 setCityHighlightedIndex(null);
-                                setInsuranceOpen(false);
-                                setInsuranceHighlightedIndex(null);
                             }}
                             className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
                             aria-label="Abrir lista de especialidades"
