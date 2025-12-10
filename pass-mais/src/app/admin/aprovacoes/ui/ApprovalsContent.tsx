@@ -339,16 +339,16 @@ function DoctorDetailModal({ doctor, loading, error, onClose }: { doctor: Doctor
   const close = () => onClose();
   const photo = doctor?.photoUrl || '';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 sm:py-8">
       <div className="absolute inset-0 bg-black/40" onClick={close} />
-      <div className="relative bg-white w-full max-w-3xl mx-4 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+      <div className="relative flex w-full max-w-3xl max-h-[90vh] flex-col rounded-2xl bg-white shadow-lg border border-gray-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white">
           <h3 className="font-semibold text-lg">Detalhes do Médico</h3>
           <button onClick={close} className="text-gray-500 hover:text-gray-700" aria-label="Fechar">
             <MdClose size={20} />
           </button>
         </div>
-        <div className="p-5 min-h-[200px]">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {loading && (
             <div className="text-sm text-gray-600">Carregando...</div>
           )}
@@ -356,7 +356,7 @@ function DoctorDetailModal({ doctor, loading, error, onClose }: { doctor: Doctor
             <div className="text-sm text-rose-600">{error}</div>
           )}
           {!loading && !error && doctor && (
-            <div className="space-y-5">
+            <>
               <div className="flex flex-col gap-4 sm:flex-row sm:gap-5 items-center sm:items-start">
                 <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0">
                   {photo ? (
@@ -395,11 +395,11 @@ function DoctorDetailModal({ doctor, loading, error, onClose }: { doctor: Doctor
                   {doctor.bio || 'Sem descrição.'}
                 </div>
               </div>
-            </div>
+            </>
           )}
-          <div className="flex justify-end gap-2 pt-4">
-            <button onClick={close} className="px-4 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-100">Fechar</button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-gray-100 bg-white px-5 py-3">
+          <button onClick={close} className="px-4 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-100">Fechar</button>
         </div>
       </div>
     </div>
