@@ -1049,7 +1049,7 @@ function passwordIsStrong(password: string) {
                           Termos e condições
                         </Link>{" "}
                         e com a {" "}
-                        <Link href="/privacidade" className="font-medium text-[#5179EF] hover:text-[#3356b3]">
+                        <Link href="/politica-privacidade" className="font-medium text-[#5179EF] hover:text-[#3356b3]">
                           Política de privacidade
                         </Link>
                         .

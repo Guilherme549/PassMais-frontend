@@ -297,7 +297,7 @@ export default function Home() {
                     </Link>
                   </li>
                   <li>
-                    <Link href="/privacidade" className="hover:text-[#5179EF] transition-colors">
+                    <Link href="/politica-privacidade" className="hover:text-[#5179EF] transition-colors">
                       Política de Privacidade
                     </Link>
                   </li>

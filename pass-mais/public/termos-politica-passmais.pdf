@@ -1,0 +1,100 @@
+Termos e Condições de Uso — Sistema Pass+
+
+1. Aceitação dos Termos
+Ao acessar e utilizar o sistema Pass+, o usuário concorda integralmente com os presentes Termos e Condições de Uso, bem como com a Política de Privacidade associada. Caso não concorde com algum dos termos aqui previstos, o usuário deverá interromper imediatamente o uso da plataforma.
+
+2. Definições
+Usuário: pessoa física que utiliza o sistema, podendo ser classificada como Paciente, Médico, Secretário(a) ou Administrador.
+Sistema Pass+: plataforma digital de agendamento e gestão de consultas médicas, de propriedade da equipe desenvolvedora vinculada ao Centro Universitário de Anápolis – UniEVANGÉLICA.
+Dados Pessoais: informações relacionadas a uma pessoa natural identificada ou identificável.
+LGPD: Lei nº 13.709/2018, que dispõe sobre o tratamento de dados pessoais no Brasil.
+
+3. Objetivo do Sistema
+O Pass+ tem por finalidade facilitar o agendamento, o gerenciamento e o acompanhamento de consultas médicas, promovendo a interação direta entre pacientes e profissionais de saúde, com segurança, agilidade e transparência.
+
+4. Acesso e Cadastro
+4.1. O acesso ao sistema requer cadastro prévio do usuário, mediante fornecimento de informações pessoais e profissionais.
+4.2. O usuário se compromete a fornecer dados verdadeiros, completos e atualizados, responsabilizando-se civil e penalmente por eventuais falsidades.
+4.3. Médicos e secretários passam por processo de aprovação administrativa, conforme descrito nos requisitos do sistema.
+
+5. Uso do Sistema
+O usuário compromete-se a utilizar o Pass+ de forma ética, segura e em conformidade com a legislação vigente, sendo expressamente vedado:
+- o uso da plataforma para fins ilícitos;
+- o compartilhamento de credenciais com terceiros;
+- o acesso não autorizado a contas ou informações de outros usuários;
+- qualquer tentativa de violar ou burlar os mecanismos de segurança do sistema.
+
+6. Responsabilidades
+Do Usuário: manter sigilo de login e senha; atualizar suas informações; respeitar os fluxos operacionais do sistema.
+Do Sistema Pass+: garantir disponibilidade, segurança e integridade dos dados, conforme descrito nos requisitos técnicos e não funcionais.
+
+7. Propriedade Intelectual
+Todo o conteúdo, código-fonte, layout, logotipos, ícones e demais elementos do Pass+ são de propriedade intelectual dos autores do projeto e não podem ser reproduzidos, copiados ou modificados sem autorização expressa.
+
+8. Modificações dos Termos
+O Pass+ poderá atualizar ou alterar estes Termos a qualquer momento. As modificações entrarão em vigor imediatamente após sua publicação na plataforma, sendo responsabilidade do usuário verificar periodicamente as atualizações.
+
+9. Limitação de Responsabilidade
+O Pass+ não se responsabiliza por:
+- falhas decorrentes de indisponibilidade de rede ou dispositivos do usuário;
+- informações incorretas fornecidas por usuários;
+- uso indevido da plataforma.
+
+10. Foro
+Fica eleito o foro da comarca de Anápolis/GO para dirimir quaisquer controvérsias decorrentes da utilização do sistema, com renúncia a qualquer outro, por mais privilegiado que seja.
+
+
+Política de Privacidade — Sistema Pass+
+
+1. Introdução
+Esta Política de Privacidade descreve como o Pass+ coleta, utiliza, armazena e protege os dados pessoais de seus usuários, em conformidade com a Lei Geral de Proteção de Dados Pessoais (LGPD).
+
+2. Dados Coletados
+O sistema poderá coletar:
+- Dados de identificação: nome, e-mail, CPF, CRM (para médicos), telefone e endereço.
+- Dados de acesso: logs, tokens de autenticação, endereço IP e histórico de login.
+- Dados de uso: informações sobre consultas agendadas, horários disponíveis e avaliações.
+- Dados financeiros: informações de pagamento vinculadas às consultas (quando aplicável).
+
+3. Finalidade do Tratamento
+Os dados são utilizados exclusivamente para:
+- autenticação e gerenciamento de perfis de usuários;
+- agendamento, cancelamento e histórico de consultas;
+- comunicação entre pacientes e profissionais de saúde;
+- emissão de notificações, recibos e relatórios administrativos;
+- aprimoramento da experiência do usuário e segurança da aplicação.
+
+4. Base Legal
+O tratamento de dados é realizado com base:
+- no consentimento do titular (art. 7º, I, da LGPD);
+- no cumprimento de obrigação legal ou regulatória;
+- na execução de contrato (prestação dos serviços de agendamento e gestão médica).
+
+5. Compartilhamento de Dados
+Os dados poderão ser compartilhados apenas com:
+- médicos vinculados às consultas do paciente;
+- administradores do sistema, para validação de cadastros e auditoria;
+- serviços de infraestrutura (AWS, serviços de e-mail e pagamento), observando as medidas de segurança adequadas.
+
+6. Armazenamento e Segurança
+Os dados são armazenados de forma segura em banco de dados PostgreSQL hospedado em ambiente AWS (Amazon Web Services), com controle de acesso, autenticação via JWT e criptografia em trânsito (HTTPS). Logs de auditoria são mantidos para fins de controle administrativo.
+
+7. Direitos do Usuário
+O titular dos dados pode, a qualquer momento:
+- solicitar confirmação da existência de tratamento;
+- acessar, corrigir ou atualizar seus dados;
+- solicitar exclusão de sua conta;
+- revogar o consentimento para tratamento de dados.
+Esses pedidos poderão ser feitos através do canal de contato oficial do sistema.
+
+8. Retenção de Dados
+Os dados pessoais serão mantidos apenas pelo período necessário ao cumprimento das finalidades informadas, ou conforme exigido por lei ou auditoria administrativa.
+
+9. Cookies e Tecnologias de Rastreamento
+O Pass+ utiliza cookies estritamente necessários para autenticação e manutenção da sessão do usuário. Nenhum dado é utilizado para fins de publicidade.
+
+10. Alterações da Política
+Esta Política poderá ser alterada a qualquer momento, mediante atualização no sistema. Recomenda-se a leitura periódica deste documento.
+
+11. Contato
+Em caso de dúvidas sobre esta Política ou solicitações relacionadas aos seus dados pessoais, entre em contato pelo e-mail oficial do projeto: passplus.suporte@gmail.com (ou o canal institucional definido pela UniEVANGÉLICA).
