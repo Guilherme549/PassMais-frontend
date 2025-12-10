@@ -3,7 +3,8 @@ const { defineConfig } = require('cypress')
 module.exports = defineConfig({
   e2e: {
     // baseUrl: 'http://localhost:3000',
-    baseUrl: 'https://www.passmais.com.br/',
+    // baseUrl: 'https://www.passmais.com.br/',
+    baseUrl: 'https://codexgo.com.br/',
     viewportWidth: 1280,
     viewportHeight: 720,
     video: false,
