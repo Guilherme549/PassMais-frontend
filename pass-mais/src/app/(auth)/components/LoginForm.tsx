@@ -6,6 +6,84 @@ import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import { useRouter } from 'next/navigation';
 import { jsonPost, setTokens } from '@/lib/api';
 
+const normalize = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+const getFriendlyLoginError = (error: unknown) => {
+  const defaultMessage = "Não foi possível realizar o login agora. Tente novamente em instantes.";
+  if (!error) return defaultMessage;
+
+  const err = error as Error & { status?: number };
+  const rawMessage = err?.message?.trim() ?? "";
+  const normalized = rawMessage ? normalize(rawMessage) : "";
+  const status = err?.status ?? 0;
+  const contains = (keywords: string[]) => keywords.some((kw) => normalized.includes(kw));
+
+  if (contains(["failed to fetch", "network", "timeout", "fetch event", "load failed"])) {
+    return "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.";
+  }
+
+  if (status === 429 || contains(["many request", "too many", "rate limit"])) {
+    return "Detectamos muitas tentativas. Aguarde alguns instantes antes de tentar novamente.";
+  }
+
+  if ([400, 401].includes(status) || contains([
+    "invalid credential",
+    "credencial invalida",
+    "invalid email",
+    "email ou senha",
+    "login ou senha",
+    "password incorrect",
+    "senha incorreta",
+    "unauthorized",
+    "user not found",
+    "usuario nao encontrado"
+  ])) {
+    return "E-mail ou senha incorretos. Revise as credenciais e tente novamente.";
+  }
+
+  if (status === 403 || contains([
+    "blocked",
+    "suspended",
+    "disabled",
+    "desativado",
+    "inativo",
+    "inactive"
+  ])) {
+    return "Seu acesso está bloqueado. Procure o administrador para liberar o login.";
+  }
+
+  if (contains([
+    "verify your email",
+    "email not verified",
+    "pendente de verificacao",
+    "aguardando confirmacao",
+    "confirm your email",
+    "confirmacao pendente"
+  ])) {
+    return "É necessário confirmar sua conta pelo e-mail enviado antes de acessar.";
+  }
+
+  if (status >= 500 || contains([
+    "proxy error",
+    "server error",
+    "internal server",
+    "bad gateway",
+    "service unavailable"
+  ])) {
+    return "Estamos com instabilidade no momento. Tente novamente em alguns minutos.";
+  }
+
+  if (rawMessage && !contains(["http", "proxy error"])) {
+    return rawMessage;
+  }
+
+  return defaultMessage;
+};
+
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +109,7 @@ export default function LoginForm() {
       }
 
       // Armazena somente o accessToken (refresh via /api/auth/refresh)
-      setTokens({ accessToken });
+      setTokens({ accessToken }, { role });
       if (role) {
         localStorage.setItem('role', role);
         // Disponibiliza a role para páginas server-side via cookie
@@ -58,7 +136,7 @@ export default function LoginForm() {
         }
       }, 100);
     } catch (err: any) {
-      setError(err?.message || 'Erro ao efetuar login.');
+      setError(getFriendlyLoginError(err));
     }
   };
 

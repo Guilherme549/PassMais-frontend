@@ -120,7 +120,7 @@ export default function SecretariaConvitePage() {
                 // Ignora falhas ao persistir credenciais.
             }
 
-            setTokens({ accessToken });
+            setTokens({ accessToken }, { role: role ?? "SECRETARY" });
             return { success: true };
         } catch {
             return {

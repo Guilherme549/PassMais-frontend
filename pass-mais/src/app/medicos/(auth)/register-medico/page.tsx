@@ -60,6 +60,88 @@ const SPECIALTIES = [
   "Endocrinologista Pediátrico",
 ];
 
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nome completo",
+  firstName: "Nome",
+  lastName: "Sobrenome",
+  email: "E-mail",
+  password: "Senha",
+  confirmPassword: "Confirmação de senha",
+  crm: "CRM",
+  phone: "Telefone",
+  cpf: "CPF",
+  birthDate: "Data de nascimento",
+  bio: "Sobre você",
+  specialty: "Especialidade",
+  consultationPrice: "Valor da consulta",
+  clinicName: "Nome do consultório",
+  streetAndNumber: "Endereço do consultório",
+  clinicAddress: "Endereço do consultório",
+  city: "Cidade",
+  clinicCity: "Cidade",
+  postalCode: "CEP",
+  clinicZipCode: "CEP",
+  lgpdAccepted: "Termos e condições",
+};
+
+function formatFieldLabel(field?: string | null) {
+  if (!field) return null;
+  const normalized = field.trim();
+  return FIELD_LABELS[normalized] ?? normalized;
+}
+
+function normalizeApiErrors(payload: any): string[] {
+  const messages: string[] = [];
+
+  const pushMessage = (field: string | null, message: string | null) => {
+    const label = formatFieldLabel(field);
+    if (label && message) {
+      messages.push(`${label}: ${message}`);
+    } else if (label) {
+      messages.push(`Revise o campo ${label}.`);
+    } else if (message) {
+      messages.push(message);
+    }
+  };
+
+  if (!payload || typeof payload !== "object") return messages;
+
+  if (payload.message && typeof payload.message === "string") {
+    pushMessage(null, payload.message);
+  }
+
+  if (payload.error && typeof payload.error === "string") {
+    pushMessage(null, payload.error);
+  }
+
+  if (Array.isArray(payload.errors)) {
+    for (const entry of payload.errors) {
+      if (!entry || typeof entry !== "object") continue;
+      const field = entry.field ?? entry.property ?? entry.name ?? null;
+      const message =
+        typeof entry.message === "string"
+          ? entry.message
+          : typeof entry.detail === "string"
+          ? entry.detail
+          : typeof entry.error === "string"
+          ? entry.error
+          : null;
+      pushMessage(field, message);
+    }
+  }
+
+  if (Array.isArray(payload.violations)) {
+    for (const entry of payload.violations) {
+      if (!entry || typeof entry !== "object") continue;
+      const field = entry.field ?? entry.propertyPath ?? null;
+      const message = typeof entry.message === "string" ? entry.message : null;
+      pushMessage(field, message);
+    }
+  }
+
+  return messages;
+}
+
 interface FormSectionProps {
   title: string;
   description?: string;
@@ -491,26 +573,16 @@ function passwordIsStrong(password: string) {
 
       if (!response.ok) {
         const contentType = response.headers.get("content-type") || "";
-        const collected: string[] = [`Erro ao enviar cadastro (HTTP ${response.status})`];
+        let collected: string[] = [`Erro ao enviar cadastro (HTTP ${response.status})`];
         if (contentType.includes("application/json")) {
           try {
             const data = await response.json();
-            if (data?.message) collected.push(String(data.message));
-            if (data?.error) collected.push(String(data.error));
-            if (Array.isArray(data?.errors)) {
-              for (const e of data.errors) {
-                if (!e) continue;
-                const item = e.message || e.field || JSON.stringify(e);
-                if (item) collected.push(String(item));
-              }
+            const normalized = normalizeApiErrors(data);
+            if (normalized.length > 0) {
+              collected = normalized;
+            } else if (data?.details) {
+              collected.push(String(data.details));
             }
-            if (Array.isArray(data?.violations)) {
-              for (const v of data.violations) {
-                const item = [v?.field, v?.message].filter(Boolean).join(": ");
-                if (item) collected.push(item);
-              }
-            }
-            if (data?.details) collected.push(String(data.details));
           } catch {
             // ignore JSON parse errors
           }
@@ -977,7 +1049,7 @@ function passwordIsStrong(password: string) {
                           Termos e condições
                         </Link>{" "}
                         e com a {" "}
-                        <Link href="/privacidade" className="font-medium text-[#5179EF] hover:text-[#3356b3]">
+                        <Link href="/politica-privacidade" className="font-medium text-[#5179EF] hover:text-[#3356b3]">
                           Política de privacidade
                         </Link>
                         .

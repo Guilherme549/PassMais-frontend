@@ -468,7 +468,7 @@ export default function SecretaryDashboardPage() {
                 return;
             }
 
-            setTokens({ accessToken: storedToken });
+            setTokens({ accessToken: storedToken }, { role: storedRole || tokenRole }, { resetSession: false });
             void refetchDoctors();
         } catch {
             clearTokens();
@@ -656,7 +656,22 @@ export default function SecretaryDashboardPage() {
                 }
                 return true;
             })
-            .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+            .sort((a, b) => {
+                const now = Date.now();
+                const timeA = new Date(a.scheduledAt).getTime();
+                const timeB = new Date(b.scheduledAt).getTime();
+
+                const safeA = Number.isNaN(timeA) ? Number.POSITIVE_INFINITY : timeA;
+                const safeB = Number.isNaN(timeB) ? Number.POSITIVE_INFINITY : timeB;
+
+                const bucketA = safeA >= now ? 0 : 1; // futuros primeiro
+                const bucketB = safeB >= now ? 0 : 1;
+                if (bucketA !== bucketB) return bucketA - bucketB;
+
+                // futuros: mais próximos primeiro; passados: os mais recentes primeiro
+                if (bucketA === 0) return safeA - safeB;
+                return safeB - safeA;
+            });
     }, [appointments, statusFilter, patientNameFilter, patientCpfFilter]);
 
     const safeTotalPages = totalPages > 0 ? totalPages : filteredAppointments.length > 0 ? 1 : 0;

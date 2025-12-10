@@ -301,13 +301,13 @@ export default function Register() {
                                 />
                                 <label htmlFor="acceptTerms" className="ml-2 text-sm text-gray-500">
                                     Li e concordo com os{" "}
-                                    <a href="#" className="text-blue-600 hover:text-blue-800">
+                                    <Link href="/termos" className="text-blue-600 hover:text-blue-800">
                                         Termos e condições
-                                    </a>{" "}
+                                    </Link>{" "}
                                     e{" "}
-                                    <a href="#" className="text-blue-600 hover:text-blue-800">
+                                    <Link href="/politica-privacidade" className="text-blue-600 hover:text-blue-800">
                                         política de privacidade
-                                    </a>
+                                    </Link>
                                 </label>
                             </div>
                             <div className="text-center mb-[24px]">
