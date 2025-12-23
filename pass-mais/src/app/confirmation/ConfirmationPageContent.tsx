@@ -21,7 +21,6 @@ export default function ConfirmationPageContent() {
     const date = searchParams.get("date");
     const time = searchParams.get("time");
     const forWhom = searchParams.get("forWhom");
-    const paymentMethod = searchParams.get("paymentMethod");
     const patientName = searchParams.get("patientName");
     const patientCpf = searchParams.get("cpf");
     const patientPhone = searchParams.get("phone");
@@ -43,7 +42,7 @@ export default function ConfirmationPageContent() {
             return;
         }
 
-        if (!doctorId || !date || !time || !forWhom || !paymentMethod) {
+        if (!doctorId || !date || !time || !forWhom) {
             router.replace("/medical-appointments");
             return;
         }
@@ -104,7 +103,7 @@ export default function ConfirmationPageContent() {
         return () => {
             isCancelled = true;
         };
-    }, [router, currentPath, doctorId, date, time, forWhom, paymentMethod]);
+    }, [router, currentPath, doctorId, date, time, forWhom]);
 
     useEffect(() => {
         if (!isLoadingDoctor && loadError) {
@@ -154,7 +153,7 @@ export default function ConfirmationPageContent() {
                                     value={patientName ?? "Não informado"}
                                 />
                             </>
-                    ) : (
+                        ) : (
                             <DetailRow label="Paciente" value={patientName ?? "-"} />
                         )}
                         {forWhom !== "other" && patientCpf ? (
@@ -163,7 +162,6 @@ export default function ConfirmationPageContent() {
                         {patientPhone ? (
                             <DetailRow label="Telefone de Contato" value={formatPhone(patientPhone)} />
                         ) : null}
-                        <DetailRow label="Método de Pagamento" value={formatPaymentMethod(paymentMethod)} />
                         <DetailRow
                             label="Local de atendimento"
                             value={doctor.address ?? buildAddressFallback(doctor)}
@@ -209,13 +207,6 @@ function formatForWhom(value: string | null): string {
     if (!value) return "-";
     if (value === "self") return "Para mim";
     if (value === "other") return "Outro paciente";
-    return value;
-}
-
-function formatPaymentMethod(value: string | null): string {
-    if (!value) return "-";
-    if (value === "pix") return "PIX";
-    if (value === "card") return "Cartão";
     return value;
 }
 

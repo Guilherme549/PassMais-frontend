@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import PaymentPageContent from "./PaymentPageContent";
+import { redirect } from "next/navigation";
 
 export default function PaymentPage() {
-    return (
-        <Suspense fallback={null}>
-            <PaymentPageContent />
-        </Suspense>
-    );
+    redirect("/medical-appointments");
 }

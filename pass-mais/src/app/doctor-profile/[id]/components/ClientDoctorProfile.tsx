@@ -32,6 +32,48 @@ interface ClientDoctorProfileProps {
 const DOCTOR_AVATAR_PLACEHOLDER = "/avatar-placeholer.jpeg";
 const REASON_MAX_LENGTH = 200;
 
+const ACTIVE_APPOINTMENTS_STORAGE_KEY = "passmais:activeDoctorAppointments";
+
+interface ActiveAppointmentRecord {
+    doctorId: string;
+    appointmentId?: string;
+    scheduledAt?: string;
+    recordedAt: string;
+}
+
+function readActiveAppointments(): ActiveAppointmentRecord[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = window.localStorage.getItem(ACTIVE_APPOINTMENTS_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as ActiveAppointmentRecord[]) : [];
+    } catch {
+        return [];
+    }
+}
+
+function pruneExpiredAppointments(records: ActiveAppointmentRecord[]): ActiveAppointmentRecord[] {
+    const now = Date.now();
+    return records.filter((record) => {
+        if (!record || typeof record !== "object") return false;
+        if (!record.doctorId) return false;
+        if (!record.scheduledAt) return true;
+        const timestamp = Date.parse(record.scheduledAt);
+        if (Number.isNaN(timestamp)) return true;
+        return timestamp > now;
+    });
+}
+
+function writeActiveAppointments(records: ActiveAppointmentRecord[]) {
+    if (typeof window === "undefined") return;
+    try {
+        window.localStorage.setItem(ACTIVE_APPOINTMENTS_STORAGE_KEY, JSON.stringify(records));
+    } catch {
+        // ignore
+    }
+}
+
 const joinAddressParts = (...parts: Array<string | null | undefined>) =>
     parts
         .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -179,11 +221,15 @@ export default function ClientDoctorProfile({
         otherPhone?: string;
     }>({});
     const [formError, setFormError] = useState<string | null>(null);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
+    const [patientIdFromToken, setPatientIdFromToken] = useState<string | null>(null);
     const [tokenSynced, setTokenSynced] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (tokenSynced) return;
         const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+        setAccessToken(token);
         if (!token) {
             setTokenSynced(true);
             return;
@@ -192,6 +238,24 @@ export default function ClientDoctorProfile({
         if (!payload) {
             setTokenSynced(true);
             return;
+        }
+
+        const resolvePatientId = (...candidates: Array<unknown>) => {
+            for (const candidate of candidates) {
+                if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+                if (candidate != null && typeof candidate !== "object") return String(candidate);
+            }
+            return null;
+        };
+
+        const resolvedPatientId = resolvePatientId(
+            payload?.patientId,
+            payload?.userId,
+            payload?.sub,
+            payload?.id
+        );
+        if (resolvedPatientId) {
+            setPatientIdFromToken((prev) => prev ?? resolvedPatientId);
         }
 
         const getString = (...keys: string[]) => {
@@ -403,7 +467,9 @@ export default function ClientDoctorProfile({
         setSelectedTime(time);
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
+        if (isSubmitting) return;
+
         if (!selectedDate || !selectedTime) {
             alert("Por favor, selecione uma data e um horário.");
             return;
@@ -519,6 +585,40 @@ export default function ClientDoctorProfile({
         setFieldErrors({});
         setFormError(null);
 
+        const scheduledDate = zonedTimeToUtc(selectedDate, selectedTime, schedule.timezone);
+        if (!scheduledDate) {
+            setFormError("Não foi possível calcular o horário da consulta. Volte e selecione novamente.");
+            return;
+        }
+
+        const token = accessToken ?? (typeof window !== "undefined" ? localStorage.getItem("accessToken") : null);
+        if (!token) {
+            setFormError("Sua sessão expirou. Faça login novamente.");
+            return;
+        }
+
+        const payloadFromToken = decodeAccessTokenPayload(token);
+        const resolvedPatientId =
+            patientIdFromToken ??
+            (() => {
+                const candidates = [
+                    payloadFromToken?.patientId,
+                    payloadFromToken?.userId,
+                    payloadFromToken?.sub,
+                    payloadFromToken?.id,
+                ];
+                for (const candidate of candidates) {
+                    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+                    if (candidate != null && typeof candidate !== "object") return String(candidate);
+                }
+                return null;
+            })();
+
+        if (!resolvedPatientId) {
+            setFormError("Não foi possível identificar o paciente titular. Faça login novamente.");
+            return;
+        }
+
         const trimmedReason = appointmentReason.trim();
         const locationLabel = (() => {
             const locationPieces: string[] = [];
@@ -539,45 +639,138 @@ export default function ClientDoctorProfile({
             return locationPieces.join(" - ");
         })();
 
-        const params = new URLSearchParams({
+        const storedAppointments = readActiveAppointments();
+        const existingAppointments = pruneExpiredAppointments(storedAppointments);
+        if (existingAppointments.length !== storedAppointments.length) {
+            writeActiveAppointments(existingAppointments);
+        }
+
+        if (existingAppointments.some((record) => record.doctorId === doctor.id)) {
+            setFormError(
+                "Você já possui uma consulta ativa com este médico. Aguarde o atendimento ou cancele a consulta atual antes de agendar novamente."
+            );
+            return;
+        }
+
+        const bookingDateTime = new Date().toISOString();
+        const targetFullName = forWhom === "other" && otherPatientNameValue ? otherPatientNameValue : normalizedName;
+        const targetCpf = forWhom === "other" && otherCpfDigits ? otherCpfDigits : primaryCpfDigits;
+        const targetBirthDate = forWhom === "other" && otherBirthDateValue ? otherBirthDateValue : birthDate;
+        const targetPhone = forWhom === "other" && otherPhoneDigits ? otherPhoneDigits : primaryPhoneDigits;
+        const resolvedLocation = locationLabel.length > 0 ? locationLabel : "Local não informado";
+
+        const payload: Record<string, unknown> = {
             doctorId: doctor.id,
-            date: selectedDate,
-            time: selectedTime,
-            forWhom,
-            timezone: schedule.timezone,
-            patientName: normalizedName,
-            cpf: primaryCpfDigits,
-            birthDate,
-        });
-        if (locationLabel.length > 0) {
-            params.set("location", locationLabel);
-        }
-        if (typeof consultationValue === "number") {
-            params.set("consultationValue", String(consultationValue));
-        }
-        if (primaryPhoneDigits.length >= 10) {
-            params.set("phone", primaryPhoneDigits);
-        }
+            patientId: resolvedPatientId,
+            appointmentDateTime: scheduledDate.toISOString(),
+            bookingDateTime,
+            consultationValue: typeof consultationValue === "number" ? consultationValue : 0,
+            patientCellPhone: targetPhone,
+            patientFullName: targetFullName,
+            patientCpf: targetCpf,
+            patientBirthDate: targetBirthDate,
+            location: resolvedLocation,
+            reason: trimmedReason,
+        };
 
-        if (
-            forWhom === "other" &&
-            otherPatientNameValue &&
-            otherCpfDigits &&
-            otherBirthDateValue &&
-            otherPhoneDigits &&
-            otherPhoneDigits.length >= 10
-        ) {
-            params.set("otherPatientName", otherPatientNameValue);
-            params.set("otherPatientCpf", otherCpfDigits);
-            params.set("otherPatientBirthDate", otherBirthDateValue);
-            params.set("otherPatientPhone", otherPhoneDigits);
-        }
+        setIsSubmitting(true);
 
-        if (trimmedReason.length > 0) {
-            params.set("reason", trimmedReason);
-        }
+        try {
+            const response = await fetch("/api/appointments", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            });
 
-        router.push(`/payment?${params.toString()}`);
+            if (!response.ok) {
+                if (response.status === 409) {
+                    setFormError("Esse horário acabou de ser ocupado. Escolha outro.");
+                    return;
+                }
+                if (response.status === 422) {
+                    const result = await response.json().catch(() => null);
+                    const firstError = result?.errors?.[0]?.message ?? result?.message;
+                    setFormError(firstError ?? "Há informações faltando ou inválidas.");
+                    return;
+                }
+                if (response.status === 401 || response.status === 403) {
+                    setFormError("Sua sessão expirou. Faça login novamente.");
+                    return;
+                }
+                if (response.status === 404) {
+                    console.error("Endpoint /api/appointments não encontrado (HTTP 404).");
+                    setFormError("Serviço indisponível no momento. Tente novamente em instantes.");
+                    return;
+                }
+
+                const text = await response.text().catch(() => "");
+                throw new Error(text || `Falha ao agendar (HTTP ${response.status})`);
+            }
+
+            const data = await response.json().catch(() => ({}));
+            const appointmentId = data?.appointmentId ?? data?.id ?? "";
+
+            const refreshedAppointments = pruneExpiredAppointments(readActiveAppointments()).filter(
+                (record) => record.doctorId !== doctor.id
+            );
+            refreshedAppointments.push({
+                doctorId: doctor.id,
+                appointmentId,
+                scheduledAt: scheduledDate.toISOString(),
+                recordedAt: new Date().toISOString(),
+            });
+            writeActiveAppointments(refreshedAppointments);
+
+            const params = new URLSearchParams({
+                doctorId: doctor.id,
+                date: selectedDate,
+                time: selectedTime,
+                forWhom,
+            });
+            if (appointmentId) {
+                params.set("appointmentId", appointmentId);
+            }
+            if (normalizedName) {
+                params.set("patientName", normalizedName);
+            }
+            if (primaryCpfDigits) {
+                params.set("cpf", primaryCpfDigits);
+            }
+            if (birthDate) {
+                params.set("birthDate", birthDate);
+            }
+            if (primaryPhoneDigits.length >= 10) {
+                params.set("phone", primaryPhoneDigits);
+            }
+
+            if (
+                forWhom === "other" &&
+                otherPatientNameValue &&
+                otherCpfDigits &&
+                otherBirthDateValue &&
+                otherPhoneDigits &&
+                otherPhoneDigits.length >= 10
+            ) {
+                params.set("otherPatientName", otherPatientNameValue);
+                params.set("otherPatientCpf", otherCpfDigits);
+                params.set("otherPatientBirthDate", otherBirthDateValue);
+                params.set("otherPatientPhone", otherPhoneDigits);
+            }
+
+            if (trimmedReason.length > 0) {
+                params.set("reason", trimmedReason);
+            }
+
+            router.push(`/confirmation?${params.toString()}`);
+        } catch (error) {
+            console.error("Erro ao criar agendamento", error);
+            setFormError(error instanceof Error ? error.message : "Erro inesperado ao criar agendamento.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -1074,11 +1267,12 @@ export default function ClientDoctorProfile({
                     <div className="flex justify-end">
                         <button
                             onClick={handleSubmit}
+                            disabled={isSubmitting}
                             className="bg-[#5179EF] text-white font-medium px-6 py-3 rounded-lg 
                 hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 focus:ring-opacity-50 
-                transition-all duration-200"
+                transition-all duration-200 disabled:cursor-not-allowed disabled:bg-gray-400"
                         >
-                            Continuar
+                            {isSubmitting ? "Agendando..." : "Continuar"}
                         </button>
                     </div>
                 </div>
